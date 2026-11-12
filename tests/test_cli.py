@@ -20,9 +20,10 @@ def test_cli_version() -> None:
 
 
 def test_cli_phased_commands_report_not_implemented() -> None:
-    assert cli.main(["ingest", "--mode", "historical"]) == 2
+    # ingest/validate/transform are implemented (Phase 2); the rest are not.
     assert cli.main(["train"]) == 2
     assert cli.main(["backtest"]) == 2
+    assert cli.main(["portfolio"]) == 2
 
 
 def test_health_report_all_probes_pass() -> None:

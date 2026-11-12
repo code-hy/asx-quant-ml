@@ -48,13 +48,15 @@ def configure_logging(
 
     Idempotent: calling twice will not duplicate handlers.
 
-    Args:
-        level: Logging level for console output.
-        log_file: Optional path for a JSON-lines file log.
-
-    Returns:
-        The configured ``asx_quant`` logger.
+    Windows consoles default to cp1252, which cannot encode common Unicode
+    punctuation (em dashes, arrows). Reconfigure stdout to UTF-8 with
+    replacement so logging and CLI output can never crash the pipeline.
     """
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):  # pragma: no cover
+            pass
     logger = logging.getLogger("asx_quant")
     logger.setLevel(logging.DEBUG)
 

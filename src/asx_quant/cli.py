@@ -1,14 +1,12 @@
 """Command-line interface for the asx-quant platform.
 
-Command set (Phase 1 implements ``health`` and ``initialise``; later phases
-implement the remaining stages — each prints a clear "not yet implemented"
-message until then, so the contract is visible from day one):
+Command set:
 
     python -m asx_quant.cli health                 foundation self-check
     python -m asx_quant.cli initialise             create dirs, DuckDB, registry
-    python -m asx_quant.cli ingest    --mode ...   (Phase 2+)
-    python -m asx_quant.cli validate               (Phase 2+)
-    python -m asx_quant.cli transform              (Phase 2+)
+    python -m asx_quant.cli ingest    --mode historical   universe + prices → Bronze
+    python -m asx_quant.cli validate               data-quality checks on Bronze
+    python -m asx_quant.cli transform              Bronze → Silver + coverage
     python -m asx_quant.cli features               (Phase 4+)
     python -m asx_quant.cli train                  (Phase 5+)
     python -m asx_quant.cli predict                (Phase 6+)
@@ -36,8 +34,7 @@ logger = get_logger("cli")
 
 #: Commands delivered in later phases; listed so users can see the contract.
 _PHASED_COMMANDS = (
-    "ingest", "validate", "transform", "features",
-    "train", "predict", "portfolio", "backtest", "report", "update",
+    "features", "train", "predict", "portfolio", "backtest", "report", "update",
 )
 
 
@@ -55,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="asx_quant",
         description=(
             "ASX Quantitative Intelligence & ML Portfolio Platform "
-            "(research only — not financial advice)."
+            "(research only - not financial advice)."
         ),
     )
     parser.add_argument("--version", action="version", version=f"asx-quant {__version__}")
@@ -64,8 +61,14 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("health", help="Run the foundation health check.")
     subparsers.add_parser("initialise", help="Create directory skeleton, DuckDB warehouse and run registry.")
 
-    for name in _PHASED_COMMANDS:
-        sub = subparsers.add_parser(name, help=f"[Phase 2+] Not yet implemented: {name}")
+    ingest = subparsers.add_parser("ingest", help="Ingest universe + historical market data into Bronze.")
+    _add_mode_argument(ingest)
+    subparsers.add_parser("validate", help="Run data-quality checks on Bronze data.")
+    subparsers.add_parser("transform", help="Transform Bronze into Silver datasets + coverage report.")
+
+    for name in ("features", "train", "predict", "portfolio",
+                 "backtest", "report", "update"):
+        sub = subparsers.add_parser(name, help=f"[Phase 4+] Not yet implemented: {name}")
         _add_mode_argument(sub)
 
     return parser
@@ -110,7 +113,7 @@ def _cmd_initialise(settings: Settings) -> int:
 def _cmd_not_implemented(name: str) -> int:
     print(
         f"Command '{name}' is planned for a later phase and is not implemented yet.\n"
-        "See the phase roadmap in README.md — do not assume this command has run."
+        "See the phase roadmap in README.md - do not assume this command has run."
     )
     return 2
 
@@ -133,6 +136,39 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "initialise":
         return _cmd_initialise(settings)
+    if args.command == "ingest":
+        from asx_quant.pipeline.stages import run_ingest
+
+        summary = run_ingest(settings, mode=args.mode)
+        print(f"Ingestion complete (run {summary['run_id']}):")
+        print(f"  universe source: {summary['universe_source']} ({summary['universe_size']} securities)")
+        print(f"  tickers with data: {summary['tickers_written']}")
+        print(f"  records written:  {summary['records_written']}")
+        if summary["failed_tickers"]:
+            print(f"  FAILED tickers:   {', '.join(summary['failed_tickers'])}")
+        return 0
+    if args.command == "validate":
+        from asx_quant.pipeline.stages import run_validate
+
+        report = run_validate(settings)
+        status = report.to_dict()["status"]
+        print(f"Data-quality validation: {status.upper()} "
+              f"({report.warn_count()} warning rules failed)")
+        for rule in report.results:
+            marker = "PASS" if rule.passed else "FAIL"
+            print(f"  [{rule.severity[0].upper()}] {marker}  {rule.name}"
+                  + (f" - {rule.failures} failures" if not rule.passed else ""))
+        return 0 if report.passed else 1
+    if args.command == "transform":
+        from asx_quant.pipeline.stages import run_transform
+
+        summary = run_transform(settings)
+        print(f"Silver transform complete (run {summary['run_id']}):")
+        print(f"  records: {summary['records']:,} across {summary['securities']} securities")
+        print(f"  calendar sessions: {summary['calendar_sessions']}")
+        print(f"  date range: {summary['first_date']} -> {summary['last_date']}")
+        print(f"  quality status: {summary['quality_status']}")
+        return 0
 
     return _cmd_not_implemented(args.command)
 

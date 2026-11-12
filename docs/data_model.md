@@ -207,11 +207,11 @@ erDiagram
 
 | Source field | Target entity.field | Status |
 |---|---|---|
-| yfinance `Open/High/Low/Close` | `FACT_EQUITY_PRICE.open_price … close_price` | Phase 2 |
-| yfinance `Adj Close` | `FACT_EQUITY_PRICE.adjusted_close` | Phase 2 |
-| yfinance `Volume` | `FACT_EQUITY_PRICE.volume` | Phase 2 |
-| yfinance `Dividends` | `FACT_EQUITY_PRICE.dividend_amount` | Phase 2 |
-| yfinance `Stock Splits` | `FACT_EQUITY_PRICE.split_factor` | Phase 2 |
+| yfinance `Open/High/Low/Close` | `FACT_EQUITY_PRICE.open_price … close_price` | **Phase 2 ✅** |
+| yfinance `Adj Close` | `FACT_EQUITY_PRICE.adjusted_close` | **Phase 2 ✅** |
+| yfinance `Volume` | `FACT_EQUITY_PRICE.volume` | **Phase 2 ✅** |
+| yfinance `Dividends` | `FACT_EQUITY_PRICE.dividend_amount` | **Phase 2 ✅** |
+| yfinance `Stock Splits` | `FACT_EQUITY_PRICE.split_factor` | **Phase 2 ✅** |
 | RBA statistical table series | `FACT_MACROECONOMIC` (rba rows) | Phase 3 |
 | ABS time series | `FACT_MACROECONOMIC` (abs rows) | Phase 3 |
 | ASIC short position reports | `FACT_SHORT_POSITION` | Phase 3 |

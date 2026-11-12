@@ -15,8 +15,8 @@ from asx_quant.storage.paths import DataLake, batch_id
 
 
 @pytest.fixture()
-def settings(project_root: Path) -> Settings:
-    return load_settings(project_root)
+def settings(repo_root: Path) -> Settings:
+    return load_settings(repo_root)
 
 
 @pytest.fixture()

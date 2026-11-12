@@ -40,6 +40,14 @@ storage:
 # Ingestion behaviour
 # ---------------------------------------------------------------------------
 ingestion:
+  universe:
+    # Free constituent source for the S&P/ASX 200 (see docs/data_sources.md).
+    source: wikipedia_asx200
+    # If the fetch fails, fall back to the curated seed list in universe.yaml
+    # and record the limitation in the ingestion report.
+    fallback_to_seed: true
+    # Wikipedia blocks default library user agents; identify ourselves.
+    user_agent_env: ASX_QUANT_USER_AGENT
   market_data:
     source: yfinance
     frequency: 1d
@@ -67,7 +75,8 @@ quality:
   # A security needs at least this many valid trading sessions to be usable.
   min_history_sessions: 250
   # Report (not discard) records outside these bounds; bounds are in AUD.
-  price_bounds: {min: 0.01, max: 100000.0}
+  # min = 0.1 cent: ASX has genuinely traded sub-cent shells (e.g. LTR 2017).
+  price_bounds: {min: 0.001, max: 100000.0}
   # Extreme single-session return that triggers a corporate-action review flag.
   extreme_return_threshold: 0.5   # +/- 50% in one session
 

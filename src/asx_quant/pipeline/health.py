@@ -44,7 +44,7 @@ class HealthReport:
         return all(c.passed for c in self.checks)
 
     def summary(self) -> str:
-        lines = [f"{'PASS' if c.passed else 'FAIL'}  {c.name}" + (f"  — {c.detail}" if c.detail else "") for c in self.checks]
+        lines = [f"{'PASS' if c.passed else 'FAIL'}  {c.name}" + (f"  - {c.detail}" if c.detail else "") for c in self.checks]
         status = "HEALTHY" if self.passed else "UNHEALTHY"
         return f"Health check: {status}\n" + "\n".join(lines)
 

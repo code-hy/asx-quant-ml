@@ -13,7 +13,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Project foundation: config, storage, logging, health check, docs | **complete** |
-| 2 | Universe + historical market data ingestion | planned |
+| 2 | Universe + historical market data ingestion | **complete** |
 | 3 | RBA / ABS / ASIC macro & alternative data | planned |
 | 4 | Gold model-ready features + targets | planned |
 | 5 | EDA + baseline models | planned |
@@ -77,9 +77,19 @@ rebuildable query layer exposing registered views over the lake.
 ```bash
 uv run asx_quant health      # foundation self-check
 uv run asx_quant initialise  # create dirs + warehouse + run registry
-# Phase 2+: ingest, validate, transform, features, train, predict,
-#           portfolio, backtest, report, update
+uv run asx_quant ingest --mode historical  # universe + 10y prices → Bronze
+uv run asx_quant validate                  # data-quality checks + report
+uv run asx_quant transform                 # Bronze → Silver + coverage report
+# Phase 3+: features, train, predict, portfolio, backtest, report, update
 ```
+
+## Data coverage (Phase 2 build)
+
+- Universe: S&P/ASX 200 constituents fetched from Wikipedia (free source;
+  survivorship bias documented in `docs/data_sources.md`)
+- ~460,000 unique security-session records in Bronze/Silver
+- Per-ticker coverage, missing sessions and quality status in
+  `data/reports/data_coverage.json` and `data/reports/data_quality.json`
 
 ## Repository layout
 
