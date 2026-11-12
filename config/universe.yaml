@@ -1,0 +1,121 @@
+# =============================================================================
+# universe.yaml — security universe definition
+# =============================================================================
+# Phase 2 will build the security master. Universe construction is
+# config-driven so the constituent set can be swapped without code changes.
+
+universe:
+  name: asx200_current_proxy
+  # CURRENT_CONSTITUENT_PROXY: today's constituent list applied across history.
+  # This introduces survivorship bias, which MUST be disclosed in reports.
+  # Alternatives for Phase 2+: "manual_list", "sector_balanced_manual".
+  methodology: current_constituent_proxy
+
+  target_size: 200
+  min_size: 150            # accept fewer if data quality filters bite
+
+  exchange: ASX
+  currency: AUD
+  instrument_type: ordinary_share
+
+  # Eligibility filters applied at each rebalance date (see portfolio.yaml
+  # for liquidity thresholds). History filters belong to the pipeline.
+  eligibility:
+    min_history_sessions: 250    # ~1 year of trading
+    require_active: true
+
+  # ---------------------------------------------------------------------------
+  # Seed list used until a constituent source is wired in Phase 2.
+  # Illustrative, cross-sector; NOT a certified ASX 200 constituent list.
+  # Sourced tickers use Yahoo's ".AX" suffix convention.
+  # ---------------------------------------------------------------------------
+  seed_tickers:
+    # Financials
+    - { ticker: "CBA.AX", sector: Financials }
+    - { ticker: "NAB.AX", sector: Financials }
+    - { ticker: "WBC.AX", sector: Financials }
+    - { ticker: "ANZ.AX", sector: Financials }
+    - { ticker: "MQG.AX", sector: Financials }
+    - { ticker: "QBE.AX", sector: Financials }
+    - { ticker: "SUN.AX", sector: Financials }
+    - { ticker: "IAG.AX", sector: Financials }
+    - { ticker: "AMP.AX", sector: Financials }
+    - { ticker: "Ben.AX", sector: Financials }      # NOTE: fix casing in Phase 2 (BEN.AX)
+    - { ticker: "CPU.AX", sector: Financials }
+    - { ticker: "PPT.AX", sector: Financials }
+    - { ticker: "MFG.AX", sector: Financials }
+    # Materials
+    - { ticker: "BHP.AX", sector: Materials }
+    - { ticker: "RIO.AX", sector: Materials }
+    - { ticker: "FMG.AX", sector: Materials }
+    - { ticker: "MIN.AX", sector: Materials }
+    - { ticker: "S32.AX", sector: Materials }
+    - { ticker: "NCM.AX", sector: Materials }
+    - { ticker: "NST.AX", sector: Materials }
+    - { ticker: "EVN.AX", sector: Materials }
+    - { ticker: "LYC.AX", sector: Materials }
+    - { ticker: "PPL.AX", sector: Materials }
+    - { ticker: "ORA.AX", sector: Materials }
+    - { ticker: "JHX.AX", sector: Materials }
+    - { ticker: "AMLI.AX", sector: Materials }      # Amcor (US listing changed; verify in Phase 2)
+    # Energy
+    - { ticker: "WDS.AX", sector: Energy }
+    - { ticker: "STO.AX", sector: Energy }
+    - { ticker: "ORG.AX", sector: Energy }
+    - { ticker: "VLS.AX", sector: Energy }          # Viva Energy
+    # Healthcare
+    - { ticker: "CSL.AX", sector: Healthcare }
+    - { ticker: "RMD.AX", sector: Healthcare }
+    - { ticker: "COH.AX", sector: Healthcare }
+    - { ticker: "RHC.AX", sector: Healthcare }
+    - { ticker: "SHL.AX", sector: Healthcare }
+    - { ticker: "FPH.AX", sector: Healthcare }
+    - { ticker: "PME.AX", sector: Healthcare }
+    - { ticker: "TLX.AX", sector: Healthcare }
+    # Consumer staples / discretionary
+    - { ticker: "WOW.AX", sector: Consumer Staples }
+    - { ticker: "COL.AX", sector: Consumer Staples }
+    - { ticker: "WES.AX", sector: Consumer Discretionary }
+    - { ticker: "JBH.AX", sector: Consumer Discretionary }
+    - { ticker: "GMG.AX", sector: Real Estate }
+    - { ticker: "SCG.AX", sector: Real Estate }
+    - { ticker: "GPT.AX", sector: Real Estate }
+    - { ticker: "DXS.AX", sector: Real Estate }
+    - { ticker: "VCX.AX", sector: Real Estate }
+    - { ticker: "MFG2.AX", sector: Real Estate }    # placeholder to be corrected in Phase 2
+    # Technology
+    - { ticker: "WTC.AX", sector: Technology }
+    - { ticker: "XRO.AX", sector: Technology }
+    - { ticker: "REA.AX", sector: Technology }
+    - { ticker: "CAR.AX", sector: Technology }
+    - { ticker: "TNE.AX", sector: Technology }
+    - { ticker: "TPG.AX", sector: Technology }
+    - { ticker: "NXT.AX", sector: Technology }
+    # Industrials / utilities / infrastructure
+    - { ticker: "TCL.AX", sector: Industrials }
+    - { ticker: "QAN.AX", sector: Industrials }
+    - { ticker: "APA.AX", sector: Utilities }
+    - { ticker: "AGL.AX", sector: Utilities }
+    - { ticker: "WOR.AX", sector: Industrials }
+    - { ticker: "BOQ.AX", sector: Financials }
+    - { ticker: "EQB.AX", sector: Financials }
+    - { ticker: "MYX.AX", sector: Consumer Discretionary }
+    - { ticker: "HVN.AX", sector: Consumer Discretionary }
+    - { ticker: "SIG.AX", sector: Healthcare }
+    - { ticker: "ann.AX", sector: Industrials }     # NOTE: fix casing in Phase 2 (ANN.AX)
+
+# ---------------------------------------------------------------------------
+# Benchmarks
+# ---------------------------------------------------------------------------
+benchmarks:
+  primary:
+    name: S&P/ASX 200 (price index via ETF proxy ^AXJO)
+    source_ticker: "^AXJO"
+    type: price_index          # ^AXJO excludes dividends; see docs/limitations
+  total_return_proxy:
+    name: Vanguard Australian Shares Index ETF
+    source_ticker: "VAS.AX"
+    type: etw_total_return_proxy   # distributions included via adj close
+  equal_weight_universe:
+    name: Equal-weighted eligible universe
+    type: synthetic

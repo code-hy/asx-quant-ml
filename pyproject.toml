@@ -1,0 +1,70 @@
+[project]
+name = "asx-quant"
+version = "0.1.0"
+description = "ASX Quantitative Intelligence & Machine Learning Portfolio Platform — research-only, long-only, multi-stock selection with free data sources."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "Henry" }]
+keywords = ["asx", "quantitative-finance", "machine-learning", "backtesting", "duckdb"]
+
+dependencies = [
+    # --- Core data stack (all with confirmed Python 3.13 wheel support) ---
+    "numpy>=2.2,<3.0",
+    "pandas>=2.2.3,<3.0",          # 2.2.3 is the first release with cp313 wheels
+    "pyarrow>=19.0,<21.0",
+    "duckdb>=1.2,<2.0",
+    "pyyaml>=6.0.2,<7.0",
+    "python-dateutil>=2.9,<3.0",
+
+    # --- Market & macro data sources (free) ---
+    "yfinance>=0.2.55,<0.3.0",
+    "requests>=2.32,<3.0",
+
+    # --- Machine learning ---
+    "scikit-learn>=1.6,<1.8",
+    "xgboost>=3.0,<4.0",
+    "lightgbm>=4.6,<5.0",
+
+    # --- Dashboard ---
+    "streamlit>=1.45,<2.0",
+    "plotly>=5.24,<7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-cov>=6.0,<8.0",
+    "ruff>=0.9,<1.0",
+]
+
+[project.scripts]
+asx_quant = "asx_quant.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asx_quant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = [
+    "ignore::DeprecationWarning:lightgbm.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.uv]
+# Prefer the already-installed pyenv 3.13.13 interpreter; uv will fall back to
+# its own managed CPython 3.13 build if that interpreter is unavailable.
+python-preference = "only-system"

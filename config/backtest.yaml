@@ -1,0 +1,58 @@
+# =============================================================================
+# backtest.yaml — backtesting engine assumptions
+# =============================================================================
+# The backtester must be transparent about every assumption here.
+
+backtest:
+  execution:
+    # Signal close (session t) -> execution at session t+1 prices. The model
+    # NEVER trades at the same close used to compute the signal.
+    signal_to_execution_lag_sessions: 1
+    execution_price: next_session_open   # next_session_open | next_session_close
+    execution_calendar: asx              # trading sessions only, never calendar days
+    slippage_bps: 10                     # base scenario; see scenarios below
+
+  transaction_costs:
+    scenarios:
+      optimistic: {brokerage_per_trade_aud: 0.0,  brokerage_percent: 0.0002, slippage_percent: 0.0005}
+      base:       {brokerage_per_trade_aud: 9.5,  brokerage_percent: 0.0005, slippage_percent: 0.0010}
+      conservative: {brokerage_per_trade_aud: 19.95, brokerage_percent: 0.0010, slippage_percent: 0.0025}
+
+  capital:
+    initial_capital_aud: 100000.0
+    allow_fractional_shares: false       # whole-share lots for realism
+    min_trade_value_aud: 500.0           # skip dust trades that just burn brokerage
+
+  dividends:
+    # Cash distributions on held positions are credited on their ex-date,
+    # using yfinance dividend records. Consistent with adjusted-close targets.
+    treatment: reinvest_to_cash          # cash account, not auto-reinvested
+
+  corporate_actions:
+    # Splits are handled by holding share quantities consistent with the
+    # raw (unadjusted) price series + recorded split factors.
+    treatment: quantity_adjusted
+
+  risk_free_rate:
+    # Constant assumption; configurable. Used for Sharpe/Sortino only.
+    annual_rate: 0.0425
+    source: assumption                   # replace with RBA series in Phase 3
+
+  periods:
+    # Final untouched test window — defined ONCE now, never tuned against.
+    test_start: "2024-07-01"
+    walk_forward:
+      train_window_sessions: 1008        # ~4 years expanding/rolling base
+      validation_window_sessions: 252
+      step_sessions: 63                  # ~1 quarter per fold
+
+  metrics:
+    trading_days_per_year: 252
+
+  sensitivity:
+    portfolio_sizes: [10, 20, 30]
+    rebalance_frequencies: [weekly, fortnightly, monthly]
+    cost_scenarios: [optimistic, base, conservative]
+    horizons: [3, 10]
+    max_stock_weights: [0.05, 0.10, 0.15]
+    max_sector_weights: [0.20, 0.30, 0.50]

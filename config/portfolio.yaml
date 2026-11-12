@@ -1,0 +1,43 @@
+# =============================================================================
+# portfolio.yaml — portfolio construction engine parameters
+# =============================================================================
+# Every value is overridable; the engine must never hard-code these.
+
+portfolio:
+  portfolio_id: ml_long_only_v1
+  direction: long_only
+
+  selection:
+    n_holdings: 20
+    signal: predicted_return_3d
+    # Minimum liquidity flag required from the feature layer (see features.yaml).
+    require_liquidity_flag: true
+
+  rebalancing:
+    frequency: weekly          # weekly | fortnightly | monthly
+    weekday: monday            # preferred rebalance weekday (ASX sessions only)
+
+  weights:
+    method: equal_weight       # equal_weight | volatility_adjusted | risk_constrained
+    max_stock_weight: 0.10
+    max_sector_weight: 0.30
+    min_stock_weight: 0.0      # long-only; no negative weights permitted
+    cash_reserve: 0.0          # residual cash if constraints cannot be met
+    vol_adjust:
+      target_volatility: 0.15  # annualised, used when method=volatility_adjusted
+      vol_lookback_sessions: 20
+      min_weight: 0.01         # floor to avoid dust positions
+      max_weight: 0.10
+
+  transaction_costs:
+    # Applied in the backtester, declared here as the portfolio's default.
+    brokerage_per_trade_aud: 9.5
+    brokerage_percent: 0.0005
+    slippage_percent: 0.0010   # base scenario; optimistic/conservative scale this
+
+  constraints:
+    min_history_sessions: 250
+    max_holdings: 20
+    total_weight_max: 1.0
+    # If constraints cannot be satisfied, keep cash rather than violate rules.
+    prefer_cash_over_violation: true

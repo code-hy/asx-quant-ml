@@ -1,0 +1,87 @@
+# =============================================================================
+# features.yaml — feature engineering registry (config side)
+# =============================================================================
+# Calculation code lives in src/asx_quant/features; this file declares WHICH
+# features are enabled, their versions and null-handling policy.
+# The authoritative human-readable catalogue is docs/feature_catalogue.md.
+
+feature_set_version: v0.1
+
+features:
+  returns:
+    enabled: true
+    windows_sessions: [1, 3, 5, 10, 20, 60, 120, 252]
+    null_policy: null_as_missing    # never fill with 0 silently
+  momentum:
+    enabled: true
+    relative_to: [benchmark, sector]
+    momentum_percentile_window: 63  # rolling cross-sectional percentile rank window
+  moving_averages:
+    enabled: true
+    windows_sessions: [5, 10, 20, 50, 100, 200]
+    price_to_sma: true
+    crossover_signals: true
+    slope_windows_sessions: [5, 20]
+  volatility:
+    enabled: true
+    windows_sessions: [5, 10, 20, 60]
+    atr_window: 14
+    drawdown_window: 252
+    beta_window: 252
+  technical:
+    enabled: true
+    rsi_window: 14
+    macd: {fast: 12, slow: 26, signal: 9}
+    bollinger: {window: 20, n_std: 2.0}
+    stochastic: {window: 14, smooth: 3}
+    adx_window: 14
+    recent_high_low_window: 63
+  volume:
+    enabled: true
+    windows_sessions: [5, 20]
+    turnover_percentile_window: 63
+    min_avg_dollar_turnover_aud: 250000   # liquidity eligibility threshold
+  market:
+    enabled: true
+    breadth_ma_windows: [20, 50]
+    regime_windows: [20, 100]
+  macro:
+    enabled: true                 # populated in Phase 3
+    point_in_time_rule: publication_date   # NEVER join on observation period alone
+    series:
+      - {id: rba_cash_rate, source: rba}
+      - {id: au_gov_yield_3y, source: rba}
+      - {id: au_gov_yield_10y, source: rba}
+      - {id: aud_usd, source: rba}
+      - {id: abs_cpi, source: abs, potentially_revised: true}
+      - {id: abs_unemployment_rate, source: abs, potentially_revised: true}
+  short_interest:
+    enabled: true                 # populated in Phase 3 (ASIC reports)
+    publication_delay_handling: publication_date
+  announcements:
+    enabled: false                # optional extension
+
+# ---------------------------------------------------------------------------
+# Target engineering
+# ---------------------------------------------------------------------------
+targets:
+  primary: future_return_3d
+  secondary: future_return_10d
+  direction_threshold: 0.0        # class 1 if future return > 0
+  # Price convention for target calculation — documented in
+  # docs/backtesting_methodology.md and enforced in code:
+  #   * Features use ADJUSTED close (split+dividend adjusted).
+  #   * Targets are computed on ADJUSTED close so dividends accrue to holders.
+  #   * Backtest execution uses RAW close prices with explicit corporate-action
+  #     handling, because that is what would be transacted.
+  target_price_basis: adjusted_close
+  embargo_sessions: 3             # purge overlap between train/target horizons
+
+# ---------------------------------------------------------------------------
+# Leakage controls (enforced by tests, not conventions)
+# ---------------------------------------------------------------------------
+leakage:
+  # A feature may only use data with session index <= prediction session.
+  max_feature_lag_sessions: 0
+  # Macro features must join on publication_date <= prediction_date.
+  macro_join_key: publication_date

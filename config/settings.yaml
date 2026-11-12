@@ -1,0 +1,81 @@
+# =============================================================================
+# settings.yaml — global platform settings
+# =============================================================================
+# All paths are relative to the project root unless they are absolute.
+
+project:
+  name: asx-quant
+  version: "0.1.0"
+  purpose: >
+    Educational and research platform for ASX equities. This is NOT personal
+    financial advice and MUST NOT be used to execute live trades.
+
+paths:
+  data_root: data
+  bronze_dir: data/bronze
+  silver_dir: data/silver
+  gold_dir: data/gold
+  models_dir: data/models
+  reports_dir: data/reports
+  duckdb_file: data/warehouse.duckdb
+  run_log_dir: data/reports/runs
+
+# ---------------------------------------------------------------------------
+# Storage conventions
+# ---------------------------------------------------------------------------
+storage:
+  # Parquet files are written with these defaults for reproducibility.
+  parquet:
+    compression: zstd
+    compression_level: 3          # balance of speed and size
+    write_statistics: true
+  duckdb:
+    # Analytical views over the Parquet lake live in these schemas.
+    schemas: [bronze, silver, gold, meta]
+  # Timestamps are stored as UTC in Parquet; dates as DATE (timezone-free).
+  timestamp_timezone: UTC
+  date_format: "%Y-%m-%d"
+
+# ---------------------------------------------------------------------------
+# Ingestion behaviour
+# ---------------------------------------------------------------------------
+ingestion:
+  market_data:
+    source: yfinance
+    frequency: 1d
+    # Target lookback; capped per-security by listing date and provider limits.
+    history_years: 10
+    # Download in batches to be polite to the free endpoint.
+    batch_size: 50
+    batch_pause_seconds: 2.0
+    max_retries: 3
+    retry_backoff_seconds: 5.0
+  macro:
+    rba_enabled: true
+    abs_enabled: true
+  asic_short_positions:
+    enabled: true          # Phase 3 will implement; config-ready now.
+  announcements:
+    enabled: false         # Optional extension; off by default.
+
+# ---------------------------------------------------------------------------
+# Data quality
+# ---------------------------------------------------------------------------
+quality:
+  # Fail the pipeline stage (vs warn-only) when a rule of this severity fails.
+  fail_on: error
+  # A security needs at least this many valid trading sessions to be usable.
+  min_history_sessions: 250
+  # Report (not discard) records outside these bounds; bounds are in AUD.
+  price_bounds: {min: 0.01, max: 100000.0}
+  # Extreme single-session return that triggers a corporate-action review flag.
+  extreme_return_threshold: 0.5   # +/- 50% in one session
+
+# ---------------------------------------------------------------------------
+# Run metadata / watermarks
+# ---------------------------------------------------------------------------
+runs:
+  run_id_format: "%Y%m%dT%H%M%SZ"
+  # Incremental updates re-reconcile this many recent sessions because free
+  # providers can silently revise recent OHLCV data.
+  reconciliation_lookback_sessions: 5
