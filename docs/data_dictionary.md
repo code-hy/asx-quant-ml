@@ -55,34 +55,48 @@ Grain: one security × one ASX trading session.
 | `source_identifier` | string | no | e.g. `yfinance`. |
 | `ingestion_run_id` | string | no | FK → run registry. |
 
-## FACT_MACROECONOMIC
+## MACRO_OBSERVATIONS (silver, Phase 3)
 
-Grain: one series × one observation × one publication.
+Grain: one series × one observation. Point-in-time publication alignment is
+enforced at ingestion and re-verified by quality rules.
 
 | Column | Type | Description |
 |---|---|---|
-| `macro_series_key` | string | e.g. `rba_cash_rate`, `abs_cpi_qtr`. |
-| `observation_date` | date | Reference period the value describes. |
-| `publication_date` | date | **Point-in-time join key** — earliest date the value was public. |
+| `series_name` | string | Canonical feature name, e.g. `rba_cash_rate`, `abs_cpi`, `au_gov_yield_10y`, `aud_usd`. |
+| `source_series_id` | string | Source-native series ID (e.g. `FCMYGBAG2D`, `GCPIAGYP`, `CASH_RATE_TARGET`). |
+| `observation_date` | date | Reference date the value describes. For the cash rate this is the ANNOUNCEMENT date (the day the market knows the new target); the original `effective_date` is kept in bronze for provenance. |
 | `value` | decimal | Observed value. |
-| `unit` | string | `%`, `index`, `AUD`, … |
-| `frequency` | string | `daily | monthly | quarterly`. |
-| `source` | string | `rba | abs`. |
-| `retrieved_at` | timestamp | UTC ingestion time. |
-| `vintage_or_revision_flag` | string | `final` or `potentially_revised` (look-ahead risk disclosure). |
+| `publication_date` | date | **Point-in-time join key** — earliest date the value could be used. |
+| `publication_date_method` | string | `same_day_publication` (daily series, cash rate) or `estimated_publication_lag` (monthly/quarterly; conservative lag in days after period end). |
+| `potentially_revised` | bool | True for monthly/quarterly ABS-derived series (look-ahead risk disclosure: joins must use `publication_date`). |
+| `frequency` | string | `daily` \| `monthly` \| `quarterly`. |
+| `unit` | string | e.g. `per_cent`, `per_cent_yoy`, `index_aud`, `aud_per_usd`. |
+| `source` | string | `rba` or `abs` (ABS data ingested via RBA statistical tables). |
+| `source_table` | string | RBA table key (`F2`, `F11`, `F11.1`, `G1`, `H5`, `I2`, `CASH_RATE`). |
+| `ingestion_run_id`, `retrieved_at` | — | Lineage audit stamp. |
 
-## FACT_SHORT_POSITION
+**Known limitation:** the CSV `Publication date` metadata row in RBA files is
+the CURRENT vintage only — never used per-row. Monthly/quarterly publication
+dates are conservative estimates (configurable lags: monthly 15d, quarterly
+35d) and are flagged as such.
 
-Grain: one security × one ASIC reporting period.
+## SHORT_POSITIONS (silver, Phase 3)
+
+Grain: one security (ASIC product code) × one trade date, from ASIC
+aggregated year-to-date reports.
 
 | Column | Type | Description |
 |---|---|---|
-| `security_key` | string | FK → `DIM_SECURITY`. |
-| `reporting_date` | date | Position reference date (short-sold as at). |
-| `publication_date` | date | ASIC publication date — **the only usable join key**. |
-| `reported_short_position` | decimal | Net short position in units. |
-| `percentage_of_issued_capital` | decimal | % of issued capital. |
-| `source` | string | `ASIC`. |
+| `ticker` | string | ASX code with `.AX` suffix, joined to `DIM_SECURITY.ticker` by the 3-letter `code`. |
+| `code` | string | ASIC product code (3-letter ASX code). |
+| `product_name` | string | ASIC product name (not conformed to security master names). |
+| `trade_date` | date | Position reference date (short-sold as at). |
+| `reported_short_positions` | decimal | Aggregated net short position in units; null when not reported. |
+| `pct_of_product_in_issue` | decimal | % of total product in issue reported as short positions. |
+| `report_date` | date | The ASIC report (file) the record was parsed from. |
+| `publication_date` | date | **Point-in-time join key** — earliest ASIC report date ≥ `trade_date` (the first report through which the market could have seen the position). |
+| `publication_date_method` | string | Always `estimated_from_report_calendar` (daily reports are normally published the next business day; this estimate is tight but never early). |
+| `ingestion_run_id`, `retrieved_at` | — | Lineage audit stamp. |
 
 ## FACT_ANNOUNCEMENT (optional extension)
 

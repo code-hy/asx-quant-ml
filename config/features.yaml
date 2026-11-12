@@ -46,18 +46,26 @@ features:
     breadth_ma_windows: [20, 50]
     regime_windows: [20, 100]
   macro:
-    enabled: true                 # populated in Phase 3
+    enabled: true
     point_in_time_rule: publication_date   # NEVER join on observation period alone
+    # All series below are ingested by Phase 3 (bronze/silver macro_observations).
     series:
-      - {id: rba_cash_rate, source: rba}
-      - {id: au_gov_yield_3y, source: rba}
-      - {id: au_gov_yield_10y, source: rba}
-      - {id: aud_usd, source: rba}
-      - {id: abs_cpi, source: abs, potentially_revised: true}
-      - {id: abs_unemployment_rate, source: abs, potentially_revised: true}
+      - {id: rba_cash_rate, source: rba, publication: announcement_date}
+      - {id: au_gov_yield_2y, source: rba, publication: same_day}
+      - {id: au_gov_yield_3y, source: rba, publication: same_day}
+      - {id: au_gov_yield_10y, source: rba, publication: same_day}
+      - {id: aud_usd, source: rba, publication: same_day, note: daily from 2023; aud_usd_monthly backs 2010-2022}
+      - {id: abs_cpi, source: abs, potentially_revised: true, publication: estimated_lag_35d}
+      - {id: abs_unemployment_rate, source: abs, potentially_revised: true, publication: estimated_lag_15d}
+      - {id: rba_commodity_index, source: rba, publication: estimated_lag_15d}
+    extra_series:                          # ingested; optional for later hypotheses
+      - {id: abs_cpi_trimmed_mean, source: abs, potentially_revised: true}
+      - {id: aud_usd_monthly, source: rba}
   short_interest:
-    enabled: true                 # populated in Phase 3 (ASIC reports)
+    enabled: true
     publication_delay_handling: publication_date
+    source: asic_short_position_reports   # Phase 3: silver.short_positions
+    note: point-in-time availability via publication_date (report calendar)
   announcements:
     enabled: false                # optional extension
 

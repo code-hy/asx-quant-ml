@@ -61,8 +61,69 @@ ingestion:
   macro:
     rba_enabled: true
     abs_enabled: true
+    # ABS-sourced statistics (CPI, labour force) are ingested via the RBA's
+    # full-history statistical tables (free, no ABS API key needed); the
+    # original publisher is recorded per series below.
+    rba:
+      # Full-history CSVs from rba.gov.au/statistics/tables (see data_sources.md).
+      tables:
+        F2:
+          csv_name: f2-data.csv
+          frequency: daily
+          series:
+            FCMYGBAG2D:  {name: au_gov_yield_2y,  unit: per_cent}
+            FCMYGBAG3D:  {name: au_gov_yield_3y,  unit: per_cent}
+            FCMYGBAG10D: {name: au_gov_yield_10y, unit: per_cent}
+        F11:
+          csv_name: f11-data.csv
+          frequency: monthly
+          series:
+            FXRUSD: {name: aud_usd_monthly, unit: aud_per_usd, original_publisher: rba}
+        F11.1:
+          csv_name: f11.1-data.csv
+          frequency: daily
+          series:
+            FXRUSD: {name: aud_usd, unit: aud_per_usd}
+            # F11.1 daily FX history starts 2023-01; F11 monthly (above) backs it.
+        G1:
+          csv_name: g1-data.csv
+          frequency: quarterly
+          series:
+            GCPIAGYP:   {name: abs_cpi, unit: per_cent_yoy, original_publisher: abs}
+            GCPIXVIYP:  {name: abs_cpi_trimmed_mean, unit: per_cent_yoy, original_publisher: abs}
+        H5:
+          csv_name: h5-data.csv
+          frequency: monthly
+          series:
+            GLFSURSA: {name: abs_unemployment_rate, unit: per_cent_sa, original_publisher: abs}
+        I2:
+          csv_name: i2-data.csv
+          frequency: monthly
+          series:
+            GRCPAIAD: {name: rba_commodity_index, unit: index_aud}
+      # Publication-date estimation for monthly/quarterly series (the CSV
+      # 'Publication date' row is the CURRENT vintage only, not per-observation).
+      # Conservative lags in days after the observation period end; every row
+      # is flagged estimated_publication_lag and potentially_revised.
+      publication_lag_days:
+        monthly: 15      # labour force / commodity index (~mid-next-month)
+        quarterly: 35    # CPI (~5 weeks after quarter end)
+      cash_rate:
+        enabled: true
+        series_name: rba_cash_rate
+        # /statistics/cash-rate/ gives each change's EFFECTIVE date; the
+        # announcement (2:30pm AEST) is the prior weekday, so the observation
+        # is dated at the announcement date with same-day publication.
+        observation_date: announcement_date
   asic_short_positions:
-    enabled: true          # Phase 3 will implement; config-ready now.
+    enabled: true
+    # One aggregated year-to-date CSV per year (latest report version), giving
+    # daily net short positions per stock; combined = full daily history.
+    start_year: 2015
+    batch_pause_seconds: 1.5
+    max_retries: 3
+    retry_backoff_seconds: 5.0
+    user_agent_env: ASX_QUANT_USER_AGENT
   announcements:
     enabled: false         # Optional extension; off by default.
 

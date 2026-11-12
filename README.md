@@ -14,7 +14,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 |---|---|---|
 | 1 | Project foundation: config, storage, logging, health check, docs | **complete** |
 | 2 | Universe + historical market data ingestion | **complete** |
-| 3 | RBA / ABS / ASIC macro & alternative data | planned |
+| 3 | RBA / ABS / ASIC macro & alternative data | **complete** |
 | 4 | Gold model-ready features + targets | planned |
 | 5 | EDA + baseline models | planned |
 | 6 | Advanced ML (Random Forest, XGBoost, LightGBM) | planned |
@@ -83,11 +83,15 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
 # Phase 3+: features, train, predict, portfolio, backtest, report, update
 ```
 
-## Data coverage (Phase 2 build)
+## Data coverage (Phase 2-3 build)
 
 - Universe: S&P/ASX 200 constituents fetched from Wikipedia (free source;
   survivorship bias documented in `docs/data_sources.md`)
 - ~460,000 unique security-session records in Bronze/Silver
+- Macro: RBA tables F2/F11/F11.1/G1/H5/I2 + cash-rate history ingested with
+  point-in-time publication dates (silver `macro_observations`)
+- Short interest: ASIC aggregated reports 2015→present, daily per stock
+  (silver `short_positions`, publication-date aligned)
 - Per-ticker coverage, missing sessions and quality status in
   `data/reports/data_coverage.json` and `data/reports/data_quality.json`
 

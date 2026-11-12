@@ -146,6 +146,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  records written:  {summary['records_written']}")
         if summary["failed_tickers"]:
             print(f"  FAILED tickers:   {', '.join(summary['failed_tickers'])}")
+        macro = summary["macro"]
+        if macro.get("status") == "ok":
+            print(f"  macro (RBA):      {macro['records']:,} observations, "
+                  f"{macro['series']} series across {len(macro['tables'])} tables")
+        else:
+            print(f"  macro (RBA):      {macro.get('status', 'skipped')}")
+        asic = summary["asic"]
+        if asic.get("status") in ("ok", "partial"):
+            print(f"  ASIC short pos:   {asic['records']:,} records, "
+                  f"{asic['securities']} securities, years "
+                  f"{asic['years'][0]}-{asic['years'][-1]}"
+                  + (f" (FAILED: {', '.join(asic['failed_reports'])})"
+                     if asic.get("failed_reports") else ""))
+        else:
+            print(f"  ASIC short pos:   {asic.get('status', 'skipped')}")
         return 0
     if args.command == "validate":
         from asx_quant.pipeline.stages import run_validate
@@ -168,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  calendar sessions: {summary['calendar_sessions']}")
         print(f"  date range: {summary['first_date']} -> {summary['last_date']}")
         print(f"  quality status: {summary['quality_status']}")
+        print(f"  macro silver: {summary['macro_status']}")
+        print(f"  short-position silver: {summary['short_positions_status']}")
         return 0
 
     return _cmd_not_implemented(args.command)

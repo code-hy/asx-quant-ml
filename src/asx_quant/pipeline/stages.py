@@ -12,7 +12,7 @@ import json
 import pandas as pd
 
 from asx_quant.config.loader import Settings, load_yaml
-from asx_quant.exceptions import IngestionError
+from asx_quant.exceptions import IngestionError, StorageError
 from asx_quant.ingestion.universe import (
     add_master_metadata,
     build_universe,
@@ -26,7 +26,12 @@ from asx_quant.ingestion.yahoo import (
 )
 from asx_quant.observability.logging import get_logger
 from asx_quant.observability.runs import RunRegistry, StageRecord
-from asx_quant.quality.checks import QualityReport, run_price_quality_checks
+from asx_quant.quality.checks import (
+    QualityReport,
+    run_macro_quality_checks,
+    run_price_quality_checks,
+    run_short_position_quality_checks,
+)
 from asx_quant.storage.parquet import ParquetWriter, read_parquet
 from asx_quant.storage.paths import DataLake, batch_id
 from asx_quant.transformations.calendar import (
@@ -142,6 +147,43 @@ def run_ingest(settings: Settings, mode: str = "historical") -> dict:
             tickers_written=len(written), failed_tickers=failed,
         )
 
+        # -- macro (RBA tables incl. ABS-via-RBA + cash rate) -------------
+        macro_summary: dict[str, object] = {"status": "disabled"}
+        if settings.raw["ingestion"]["macro"].get("rba_enabled", False):
+            record = registry.begin_stage("ingest_macro_rba")
+            try:
+                macro_summary = ingest_rba_bronze(lake, settings, registry,
+                                                  log_records)
+                registry.finish_stage(
+                    record, record_count=int(macro_summary["records"]),  # type: ignore[arg-type]
+                    **{k: v for k, v in macro_summary.items() if k != "status"},
+                )
+            except Exception as exc:  # noqa: BLE001 - optional source
+                logger.error("RBA macro ingestion failed (prices are "
+                             "unaffected): %s", exc)
+                macro_summary = {"status": "failed", "error": str(exc)}
+                registry.finish_stage(record, status="failed", error=str(exc))
+                record = None
+
+        # -- ASIC aggregated short positions ------------------------------
+        asic_summary: dict[str, object] = {"status": "disabled"}
+        if settings.raw["ingestion"]["asic_short_positions"].get("enabled",
+                                                                 False):
+            record = registry.begin_stage("ingest_asic")
+            try:
+                asic_summary = ingest_asic_bronze(lake, settings, registry,
+                                                  log_records)
+                registry.finish_stage(
+                    record, record_count=int(asic_summary["records"]),  # type: ignore[arg-type]
+                    **{k: v for k, v in asic_summary.items() if k != "status"},
+                )
+            except Exception as exc:  # noqa: BLE001 - optional source
+                logger.error("ASIC ingestion failed (prices are unaffected): %s",
+                             exc)
+                asic_summary = {"status": "failed", "error": str(exc)}
+                registry.finish_stage(record, status="failed", error=str(exc))
+                record = None
+
         summary = {
             "run_id": registry.run_id,
             "universe_source": str(universe["universe_source"].iloc[0]),
@@ -149,6 +191,8 @@ def run_ingest(settings: Settings, mode: str = "historical") -> dict:
             "tickers_written": len(written),
             "records_written": sum(written.values()),
             "failed_tickers": failed,
+            "macro": macro_summary,
+            "asic": asic_summary,
         }
         registry.log_dir.parent.joinpath("ingestion_summary.json").write_text(
             json.dumps(summary, indent=2), encoding="utf-8"
@@ -160,26 +204,145 @@ def run_ingest(settings: Settings, mode: str = "historical") -> dict:
         raise
 
 
+def ingest_rba_bronze(
+    lake: DataLake,
+    settings: Settings,
+    registry: RunRegistry,
+    log_records: list[dict[str, object]],
+) -> dict[str, object]:
+    """Ingest RBA statistical tables + cash rate into Bronze batches."""
+    from asx_quant.ingestion.rba import build_macro_observations
+
+    macro = build_macro_observations(settings)
+    writer = ParquetWriter(settings)
+    batch = registry.run_id
+    tables: list[str] = []
+    for table_key, group in macro.groupby("source_table"):
+        path = lake.bronze_batch_path("rba", str(table_key), batch)
+        writer.write(group, path, run_id=registry.run_id,
+                     dataset_name=f"bronze_rba_{table_key}")
+        tables.append(str(table_key))
+        log_records.append({
+            "stage": "ingest_macro_rba", "run_id": registry.run_id,
+            "batch_id": batch, "source": "rba",
+            "source_table": table_key, "record_count": len(group),
+            "status": "success",
+            "series": sorted(group["series_name"].unique().tolist()),
+            "date_range": [
+                str(group["observation_date"].min().date()),
+                str(group["observation_date"].max().date()),
+            ],
+        })
+    return {
+        "status": "ok", "records": len(macro),
+        "series": int(macro["series_name"].nunique()), "tables": tables,
+    }
+
+
+def ingest_asic_bronze(
+    lake: DataLake,
+    settings: Settings,
+    registry: RunRegistry,
+    log_records: list[dict[str, object]],
+) -> dict[str, object]:
+    """Ingest ASIC aggregated short positions into Bronze batches."""
+    from asx_quant.ingestion.asic import (
+        default_asic_http_get,
+        ingest_asic_reports,
+        write_ingestion_log,
+    )
+
+    index, positions, asic_log = ingest_asic_reports(
+        settings, default_asic_http_get()
+    )
+    writer = ParquetWriter(settings)
+    batch = registry.run_id
+    idx_path = lake.bronze_batch_path("asic", "report_index", batch)
+    writer.write(index, idx_path, run_id=registry.run_id,
+                 dataset_name="bronze_asic_report_index")
+    years: list[int] = []
+    for year, group in positions.groupby("report_year"):
+        path = lake.bronze_batch_path("asic", f"ytd_{int(year)}", batch)
+        writer.write(group, path, run_id=registry.run_id,
+                     dataset_name=f"bronze_asic_ytd_{int(year)}")
+        years.append(int(year))
+    write_ingestion_log(
+        lake.bronze_domain_dir("asic") / INGESTION_LOG_NAME, asic_log
+    )
+    for record in asic_log:
+        log_records.append({"run_id": registry.run_id, **record})
+    failed_years = [r["source_report"] for r in asic_log if r.get("status") != "success"]
+    return {
+        "status": "ok" if not failed_years else "partial",
+        "records": len(positions),
+        "securities": int(positions["code"].nunique()),
+        "years": years,
+        "failed_reports": failed_years,
+    }
+
+
 # ----------------------------------------------------------------- validate
 def run_validate(settings: Settings) -> QualityReport:
-    """Stage 2: run data-quality checks on the Bronze price data."""
+    """Stage 2: run data-quality checks on all Bronze data.
+
+    Prices are always validated; macro and short-position checks run when
+    their bronze data exists (older builds may predate Phase 3).
+    """
     lake = DataLake.from_settings(settings)
     registry = _make_registry(settings, lake)
     record = registry.begin_stage("validate")
     try:
+        combined = QualityReport(dataset="bronze_all")
         frames = load_bronze_prices(lake)
         standardised = standardise_bronze_prices(frames)
-        report = run_price_quality_checks(
+        price_report = run_price_quality_checks(
             standardised,
             dataset_name="bronze_prices",
             quality_cfg=settings.raw["quality"],
         )
+        combined.results.extend(price_report.results)
+        record_count = len(standardised)
+
+        from asx_quant.transformations.macro import _load_bronze_domain
+
+        try:
+            bronze_rba = _load_bronze_domain(lake, "rba")
+            macro = pd.concat([f for f in bronze_rba.values() if not f.empty],
+                              ignore_index=True)
+            macro["observation_date"] = pd.to_datetime(macro["observation_date"])
+            macro["publication_date"] = pd.to_datetime(macro["publication_date"])
+            macro["value"] = pd.to_numeric(macro["value"], errors="coerce")
+            macro_report = run_macro_quality_checks(
+                macro, dataset_name="macro_observations")
+            combined.results.extend(macro_report.results)
+            record_count += len(macro)
+        except StorageError:
+            logger.info("No bronze RBA data present; macro validation skipped.")
+
+        try:
+            bronze_asic = _load_bronze_domain(
+                lake, "asic", tick_filter=lambda name: name.startswith("ytd_"))
+            positions = pd.concat(
+                [f for f in bronze_asic.values() if not f.empty],
+                ignore_index=True)
+            for col in ("trade_date", "publication_date"):
+                positions[col] = pd.to_datetime(positions[col])
+            positions["ticker"] = positions["code"].astype(str) + ".AX"
+            positions_report = run_short_position_quality_checks(
+                positions, dataset_name="short_positions")
+            combined.results.extend(positions_report.results)
+            record_count += len(positions)
+        except StorageError:
+            logger.info("No bronze ASIC data present; short-position "
+                        "validation skipped.")
+
+        report = combined
         report_path = report.save(lake.report_path("data_quality", ".json"))
         status = report.to_dict()["status"]
         registry.finish_stage(
             record,
             status="success" if report.passed else "failed",
-            record_count=len(standardised),
+            record_count=record_count,
             error=None if report.passed else
             ", ".join(r.name for r in report.errors if not r.passed),
             report_path=str(report_path),
@@ -227,6 +390,57 @@ def run_transform(settings: Settings) -> dict:
             overwrite=True, dataset_name="security_master",
         )
 
+        # -- macro + short positions (Phase 3; skipped if bronze absent) --
+        macro_status = "skipped"
+        short_status = "skipped"
+        macro_detail: dict[str, object] = {}
+        try:
+            from asx_quant.transformations.macro import (
+                transform_macro_to_silver,
+                transform_short_positions_to_silver,
+            )
+
+            macro_path, macro_quality = transform_macro_to_silver(
+                lake, settings, registry)
+            macro_silver = read_parquet(macro_path)
+            macro_status = (
+                macro_quality.to_dict()["status"] if macro_quality else "ok"
+            )
+            macro_detail = {
+                "records": len(macro_silver),
+                "series": int(macro_silver["series_name"].nunique()),
+                "series_names": sorted(
+                    macro_silver["series_name"].unique().tolist()),
+                "first_publication_date": str(
+                    macro_silver["publication_date"].min().date()),
+                "quality_status": macro_status,
+            }
+            logger.info("Macro silver: %s", macro_detail)
+        except StorageError as exc:
+            logger.info("Macro silver skipped: %s", exc)
+
+        try:
+            from asx_quant.transformations.macro import (
+                transform_short_positions_to_silver,
+            )
+
+            short_path, short_quality = transform_short_positions_to_silver(
+                lake, settings, registry)
+            short_silver = read_parquet(short_path)
+            short_status = (
+                short_quality.to_dict()["status"] if short_quality else "ok"
+            )
+            short_detail = {
+                "records": len(short_silver),
+                "securities": int(short_silver["ticker"].nunique()),
+                "first_trade_date": str(short_silver["trade_date"].min().date()),
+                "last_trade_date": str(short_silver["trade_date"].max().date()),
+                "quality_status": short_status,
+            }
+            logger.info("Short-position silver: %s", short_detail)
+        except StorageError as exc:
+            logger.info("Short-position silver skipped: %s", exc)
+
         _register_warehouse_views(settings, lake)
 
         summary = {
@@ -240,6 +454,8 @@ def run_transform(settings: Settings) -> dict:
             "first_date": str(silver["date"].min().date()),
             "last_date": str(silver["date"].max().date()),
             "quality_status": quality.to_dict()["status"] if quality else "skipped",
+            "macro_status": macro_status,
+            "short_positions_status": short_status,
         }
         registry.finish_stage(record, record_count=len(silver), **{
             k: v for k, v in summary.items() if k != "run_id"
@@ -311,21 +527,12 @@ def _register_warehouse_views(settings: Settings, lake: DataLake) -> None:
     warehouse = get_warehouse(settings)
     try:
         warehouse.connect()
-        warehouse.register_view(
-            "silver", "equity_prices",
-            lake.silver_dataset_path("equity_prices"), layer="silver",
-        )
-        warehouse.register_view(
-            "silver", "security_master",
-            lake.silver_dataset_path("security_master"), layer="silver",
-        )
-        warehouse.register_view(
-            "silver", "market_calendar",
-            lake.silver_dataset_path("market_calendar"), layer="silver",
-        )
-        warehouse.register_view(
-            "silver", "data_coverage",
-            lake.silver_dataset_path("data_coverage"), layer="silver",
-        )
+        for name in ("equity_prices", "security_master", "market_calendar",
+                     "data_coverage", "macro_observations", "short_positions"):
+            path = lake.silver_dataset_path(name)
+            if path.exists():
+                warehouse.register_view(
+                    "silver", name, path, layer="silver",
+                )
     finally:
         warehouse.close()
