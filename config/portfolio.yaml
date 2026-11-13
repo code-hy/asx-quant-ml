@@ -10,6 +10,14 @@ portfolio:
   selection:
     n_holdings: 20
     signal: predicted_return_3d
+    # Signal source: OOS walk-forward predictions (gold/predictions.parquet,
+    # latest-fold-wins). The model was chosen on EVALUATION-group metrics
+    # only (test windows ending before backtest.yaml periods.test_start) —
+    # holdout diagnostics were never used for selection.
+    # Phase 5 evaluation Spearman IC: hist_gbt_reg 0.030 > ridge 0.007.
+    prediction_source:
+      dataset: predictions
+      model: hist_gbt_reg
     # Minimum liquidity flag required from the feature layer (see features.yaml).
     require_liquidity_flag: true
 

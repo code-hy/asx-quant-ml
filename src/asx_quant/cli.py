@@ -67,10 +67,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("transform", help="Transform Bronze into Silver datasets + coverage report.")
     subparsers.add_parser("features", help="Compute the Gold feature set + target labels (Phase 4).")
     subparsers.add_parser("train", help="Walk-forward model training + OOS predictions (Phase 5).")
+    subparsers.add_parser("portfolio", help="Construct long-only target portfolios (Phase 6).")
 
-    for name in ("predict", "portfolio",
-                 "backtest", "report", "update"):
-        sub = subparsers.add_parser(name, help=f"[Phase 6+] Not yet implemented: {name}")
+    for name in ("predict", "backtest", "report", "update"):
+        sub = subparsers.add_parser(name, help=f"[Phase 7+] Not yet implemented: {name}")
         _add_mode_argument(sub)
 
     return parser
@@ -215,6 +215,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  [{name}] evaluation ROC-AUC: {auc}")
         for name, ic in summary["evaluation_spearman"].items():
             print(f"  [{name}] evaluation Spearman IC: {ic}")
+        print(f"  quality status: {summary['quality_status']} "
+              f"({summary['warn_failures']} warnings)")
+        return 0
+    if args.command == "portfolio":
+        from asx_quant.pipeline.stages import run_portfolio
+
+        summary = run_portfolio(settings)
+        print(f"Portfolio construction complete (run {summary['run_id']}):")
+        print(f"  rebalances: {summary['n_rebalances']} "
+              f"({summary['n_weight_rows']:,} weight rows)")
+        print(f"  avg turnover per rebalance: {summary['avg_turnover']:.4f}")
         print(f"  quality status: {summary['quality_status']} "
               f"({summary['warn_failures']} warnings)")
         return 0

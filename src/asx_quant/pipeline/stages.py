@@ -546,6 +546,36 @@ def run_train(settings: Settings) -> dict:
         raise
 
 
+# ----------------------------------------------------------------- portfolio
+def run_portfolio(settings: Settings) -> dict:
+    """Stage 6: OOS predictions -> long-only target portfolios (Phase 6)."""
+    from asx_quant.portfolio.build import build_portfolios
+
+    lake = DataLake.from_settings(settings)
+    registry = _make_registry(settings, lake)
+    record = registry.begin_stage("portfolio")
+    try:
+        result = build_portfolios(lake, settings, registry)
+        portfolios = read_parquet(result.portfolios_path)
+        summary = {
+            "run_id": registry.run_id,
+            "n_rebalances": result.n_rebalances,
+            "n_weight_rows": len(portfolios),
+            "avg_turnover": result.avg_turnover,
+            "quality_status": (result.report.to_dict()["status"]
+                               if result.report else "skipped"),
+            "warn_failures": (result.report.warn_count()
+                              if result.report else 0),
+        }
+        registry.finish_stage(record, record_count=len(portfolios), **{
+            k: v for k, v in summary.items() if k != "run_id"
+        })
+        return summary
+    except Exception as exc:
+        registry.finish_stage(record, status="failed", error=str(exc))
+        raise
+
+
 def _latest_security_master(lake: DataLake) -> pd.DataFrame:
     batches = lake.bronze_batches("security_master", "asx200")
     if not batches:

@@ -8,7 +8,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 > **Not financial advice.** This is an educational project. It does not execute live
 > trades, and its outputs are historical research signals, not trade instructions.
 
-## Status — Phase 1 (Project Foundation) ✅
+## Status — Phase 6 (Portfolio Construction) ✅
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -17,7 +17,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 | 3 | RBA / ABS / ASIC macro & alternative data | **complete** |
 | 4 | Feature engineering + target labels | **complete** |
 | 5 | Model training (purged walk-forward CV) + OOS predictions | **complete** |
-| 6 | Portfolio construction engine | planned |
+| 6 | Portfolio construction engine | **complete** |
 | 7 | Backtesting framework | planned |
 | 8 | Sensitivity analysis + robustness | planned |
 | 9 | Streamlit dashboard + automation | planned |
@@ -99,6 +99,11 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
 - Walk-forward trained models (logistic + HistGBT classifier/regressor,
   purged/embargoed, held-out window 2024-07-01+) with OOS predictions in
   `gold/predictions.parquet` — see `docs/training_methodology.md`
+- Target portfolios (`gold/target_portfolios.parquet`): weekly Monday
+  rebalances from the `hist_gbt_reg` signal (chosen on evaluation-group
+  metrics only), 20 liquid names, long-only, 10% per-name cap, cash
+  residual — see `data/reports/portfolio_summary.json` and
+  `data/reports/portfolio_quality.json`
 - Per-ticker coverage, missing sessions and quality status in
   `data/reports/data_coverage.json`, `data/reports/data_quality.json`,
   `data/reports/data_quality_features.json` and
