@@ -65,10 +65,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_mode_argument(ingest)
     subparsers.add_parser("validate", help="Run data-quality checks on Bronze data.")
     subparsers.add_parser("transform", help="Transform Bronze into Silver datasets + coverage report.")
+    subparsers.add_parser("features", help="Compute the Gold feature set + target labels (Phase 4).")
 
-    for name in ("features", "train", "predict", "portfolio",
+    for name in ("train", "predict", "portfolio",
                  "backtest", "report", "update"):
-        sub = subparsers.add_parser(name, help=f"[Phase 4+] Not yet implemented: {name}")
+        sub = subparsers.add_parser(name, help=f"[Phase 5+] Not yet implemented: {name}")
         _add_mode_argument(sub)
 
     return parser
@@ -185,6 +186,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  quality status: {summary['quality_status']}")
         print(f"  macro silver: {summary['macro_status']}")
         print(f"  short-position silver: {summary['short_positions_status']}")
+        return 0
+    if args.command == "features":
+        from asx_quant.pipeline.stages import run_features
+
+        summary = run_features(settings)
+        print(f"Feature build complete (run {summary['run_id']}):")
+        print(f"  feature set: {summary['feature_set_version']} "
+              f"({summary['n_features']} features)")
+        print(f"  rows: {summary['n_rows']:,} across "
+              f"{summary['securities']} securities")
+        print(f"  date range: {summary['first_date']} -> {summary['last_date']}")
+        print(f"  quality status: {summary['quality_status']} "
+              f"({summary['warn_failures']} warnings)")
+        print(f"  labels: {summary['label_horizons']} sessions, "
+              f"embargo {summary['embargo_sessions']} sessions")
         return 0
 
     return _cmd_not_implemented(args.command)

@@ -466,6 +466,43 @@ def run_transform(settings: Settings) -> dict:
         raise
 
 
+# ------------------------------------------------------------------ features
+def run_features(settings: Settings) -> dict:
+    """Stage 4: Silver → Gold feature set + target labels (Phase 4)."""
+    from asx_quant.features.build import build_feature_set
+
+    lake = DataLake.from_settings(settings)
+    registry = _make_registry(settings, lake)
+    record = registry.begin_stage("features")
+    try:
+        result = build_feature_set(lake, settings, registry)
+        features = read_parquet(result.features_path)
+        targets = read_parquet(result.targets_path)
+        summary = {
+            "run_id": registry.run_id,
+            "feature_set_version": result.feature_set_version,
+            "n_features": result.n_features,
+            "n_rows": result.n_rows,
+            "securities": int(features["ticker"].nunique()),
+            "first_date": str(features["date"].min().date()),
+            "last_date": str(features["date"].max().date()),
+            "quality_status": (result.report.to_dict()["status"]
+                               if result.report else "skipped"),
+            "warn_failures": (result.report.warn_count()
+                              if result.report else 0),
+            "label_horizons": "3d/10d",
+            "embargo_sessions": 3,
+            "labelled_rows": int(targets["future_return_3d"].notna().sum()),
+        }
+        registry.finish_stage(record, record_count=result.n_rows, **{
+            k: v for k, v in summary.items() if k != "run_id"
+        })
+        return summary
+    except Exception as exc:
+        registry.finish_stage(record, status="failed", error=str(exc))
+        raise
+
+
 def _latest_security_master(lake: DataLake) -> pd.DataFrame:
     batches = lake.bronze_batches("security_master", "asx200")
     if not batches:

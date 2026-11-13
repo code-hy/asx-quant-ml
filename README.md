@@ -15,6 +15,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 | 1 | Project foundation: config, storage, logging, health check, docs | **complete** |
 | 2 | Universe + historical market data ingestion | **complete** |
 | 3 | RBA / ABS / ASIC macro & alternative data | **complete** |
+| 4 | Feature engineering + target labels | **complete** |
 | 4 | Gold model-ready features + targets | planned |
 | 5 | EDA + baseline models | planned |
 | 6 | Advanced ML (Random Forest, XGBoost, LightGBM) | planned |
@@ -83,7 +84,7 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
 # Phase 3+: features, train, predict, portfolio, backtest, report, update
 ```
 
-## Data coverage (Phase 2-3 build)
+## Data coverage (Phase 2-4 build)
 
 - Universe: S&P/ASX 200 constituents fetched from Wikipedia (free source;
   survivorship bias documented in `docs/data_sources.md`)
@@ -92,8 +93,13 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
   point-in-time publication dates (silver `macro_observations`)
 - Short interest: ASIC aggregated reports 2015→present, daily per stock
   (silver `short_positions`, publication-date aligned)
+- Gold feature set (`gold/features.parquet`, ~50 features per
+  ticker-session) and target labels (`gold/target_labels.parquet`,
+  future_return_3d/10d with purge-ready availability dates) — see
+  `docs/feature_catalogue.md`
 - Per-ticker coverage, missing sessions and quality status in
-  `data/reports/data_coverage.json` and `data/reports/data_quality.json`
+  `data/reports/data_coverage.json`, `data/reports/data_quality.json` and
+  `data/reports/data_quality_features.json`
 
 ## Repository layout
 
