@@ -1,0 +1,132 @@
+# =============================================================================
+# train.yaml — model training registry (Phase 5)
+# =============================================================================
+# The authoritative description of WHAT is trained and HOW it is evaluated.
+# The leakage rules here are enforced by tests (tests/test_train.py), not by
+# convention: purged, embargoed walk-forward evaluation, and a final held-out
+# window that model selection must never touch (matches
+# backtest.yaml periods.test_start).
+
+train:
+  model_version: v0.1
+
+  # --- gold inputs ----------------------------------------------------------
+  features_dataset: features          # gold/features.parquet
+  targets_dataset: target_labels      # gold/target_labels.parquet
+  # The stamped feature_set_version column in gold/features MUST match this,
+  # otherwise the build aborts (training on an unknown feature set is a bug).
+  feature_set_version: v0.1
+
+  # --- target ---------------------------------------------------------------
+  target:
+    horizon: 3                        # primary horizon (trading sessions)
+    classification_label: direction_3d
+    regression_label: future_return_3d
+    # Rows with a NaN label are excluded at fit/evaluation time (never filled).
+
+  # --- columns --------------------------------------------------------------
+  columns:
+    # Meta/identifier columns are always excluded from X; label columns
+    # (future_*, direction_*, label_available_date_*) can never enter X
+    # (enforced by a hard assertion in code). Everything numeric left is a
+    # feature. Exclude additional columns here if ever needed:
+    exclude: []
+
+  # --- walk-forward cross-validation -----------------------------------------
+  cv:
+    scheme: walk_forward
+    train_window_sessions: 1008       # rolling window (~4 years); null/0 = expanding
+    test_window_sessions: 252
+    step_sessions: 63                 # ~1 quarter per fold
+    min_train_sessions: 504           # folds with less training data are skipped
+    purge: true                       # drop train rows whose label window reaches into test
+    embargo_sessions: 3               # also drop train rows in the embargo gap before test
+    # Model SELECTION/evaluation aggregates use only folds whose test window
+    # ends BEFORE this date. Folds beyond it still generate predictions for
+    # the Phase 6/7 backtest (trained strictly on earlier data), but their
+    # metrics are reported separately as hold-out diagnostics, never used to
+    # choose models or hyper-parameters.
+    evaluation_test_end: "2024-07-01"
+
+  # --- models ----------------------------------------------------------------
+  # kind: classifier (prob of up) | regressor (expected future return)
+  # Every classifier applies class_weight balancing (see each entry).
+  # HistGBT/GBDT models MUST run with early stopping disabled: sklearn's
+  # early stopping uses a RANDOM validation split, which would leak future
+  # sessions into training through the validation fold.
+  models:
+    logistic:
+      enabled: true
+      kind: classifier
+      estimator: logistic_regression
+      preprocessing: impute_median_scale   # logistic needs finite, scaled input
+      params: {C: 0.1, max_iter: 2000}
+      class_weight: balanced
+    hist_gbt:
+      enabled: true
+      kind: classifier
+      estimator: hist_gradient_boosting
+      preprocessing: none                  # native NaN support
+      params:
+        max_iter: 200
+        learning_rate: 0.06
+        max_leaf_nodes: 31
+        min_samples_leaf: 200
+        l2_regularization: 1.0
+        early_stopping: false
+      class_weight: balanced
+    hist_gbt_reg:
+      enabled: true
+      kind: regressor
+      estimator: hist_gradient_boosting_regressor
+      preprocessing: none
+      params:
+        max_iter: 200
+        learning_rate: 0.06
+        max_leaf_nodes: 31
+        min_samples_leaf: 200
+        l2_regularization: 1.0
+        early_stopping: false
+    ridge:
+      enabled: true
+      kind: regressor
+      estimator: ridge
+      preprocessing: impute_median_scale
+      params: {alpha: 10.0}
+    # Available for comparison (Phase 5+); disabled to keep the default run fast.
+    lightgbm:
+      enabled: false
+      kind: classifier
+      estimator: lightgbm
+      preprocessing: none
+      params:
+        n_estimators: 300
+        learning_rate: 0.05
+        num_leaves: 63
+        min_child_samples: 200
+        reg_lambda: 1.0
+      scale_pos_weight: auto          # n_negative / n_positive per fold
+    xgboost:
+      enabled: false
+      kind: classifier
+      estimator: xgboost
+      preprocessing: none
+      params:
+        n_estimators: 300
+        learning_rate: 0.05
+        max_depth: 6
+        reg_lambda: 1.0
+      scale_pos_weight: auto
+
+  # --- evaluation ------------------------------------------------------------
+  evaluation:
+    classification_metrics: [roc_auc, log_loss, brier, accuracy, precision, recall]
+    regression_metrics: [rmse, mae, r2, spearman]
+
+  # --- outputs ---------------------------------------------------------------
+  outputs:
+    predictions_dataset: predictions  # gold/predictions.parquet (walk-forward OOS)
+    save_final_artifacts: true        # data/models/<model_version>/<model>.joblib
+    # NOTE: final artifacts are trained on ALL labelled history (for Phase 6+
+    # inference). They are NEVER used for evaluation — all reported metrics
+    # come from the walk-forward folds above.

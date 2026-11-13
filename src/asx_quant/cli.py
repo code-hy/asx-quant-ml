@@ -66,10 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("validate", help="Run data-quality checks on Bronze data.")
     subparsers.add_parser("transform", help="Transform Bronze into Silver datasets + coverage report.")
     subparsers.add_parser("features", help="Compute the Gold feature set + target labels (Phase 4).")
+    subparsers.add_parser("train", help="Walk-forward model training + OOS predictions (Phase 5).")
 
-    for name in ("train", "predict", "portfolio",
+    for name in ("predict", "portfolio",
                  "backtest", "report", "update"):
-        sub = subparsers.add_parser(name, help=f"[Phase 5+] Not yet implemented: {name}")
+        sub = subparsers.add_parser(name, help=f"[Phase 6+] Not yet implemented: {name}")
         _add_mode_argument(sub)
 
     return parser
@@ -201,6 +202,21 @@ def main(argv: list[str] | None = None) -> int:
               f"({summary['warn_failures']} warnings)")
         print(f"  labels: {summary['label_horizons']} sessions, "
               f"embargo {summary['embargo_sessions']} sessions")
+        return 0
+    if args.command == "train":
+        from asx_quant.pipeline.stages import run_train
+
+        summary = run_train(settings)
+        print(f"Training complete (run {summary['run_id']}):")
+        print(f"  model version: {summary['model_version']} "
+              f"({summary['n_models']} models, {summary['n_folds']} folds)")
+        print(f"  OOS predictions: {summary['n_prediction_rows']:,} rows")
+        for name, auc in summary["evaluation_auc"].items():
+            print(f"  [{name}] evaluation ROC-AUC: {auc}")
+        for name, ic in summary["evaluation_spearman"].items():
+            print(f"  [{name}] evaluation Spearman IC: {ic}")
+        print(f"  quality status: {summary['quality_status']} "
+              f"({summary['warn_failures']} warnings)")
         return 0
 
     return _cmd_not_implemented(args.command)

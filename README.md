@@ -16,11 +16,10 @@ time-series-aware machine learning → long-only portfolio construction → back
 | 2 | Universe + historical market data ingestion | **complete** |
 | 3 | RBA / ABS / ASIC macro & alternative data | **complete** |
 | 4 | Feature engineering + target labels | **complete** |
-| 4 | Gold model-ready features + targets | planned |
-| 5 | EDA + baseline models | planned |
-| 6 | Advanced ML (Random Forest, XGBoost, LightGBM) | planned |
-| 7 | Portfolio construction engine | planned |
-| 8 | Backtesting framework | planned |
+| 5 | Model training (purged walk-forward CV) + OOS predictions | **complete** |
+| 6 | Portfolio construction engine | planned |
+| 7 | Backtesting framework | planned |
+| 8 | Sensitivity analysis + robustness | planned |
 | 9 | Streamlit dashboard + automation | planned |
 | 10 | Final report + presentation | planned |
 
@@ -97,9 +96,13 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
   ticker-session) and target labels (`gold/target_labels.parquet`,
   future_return_3d/10d with purge-ready availability dates) — see
   `docs/feature_catalogue.md`
+- Walk-forward trained models (logistic + HistGBT classifier/regressor,
+  purged/embargoed, held-out window 2024-07-01+) with OOS predictions in
+  `gold/predictions.parquet` — see `docs/training_methodology.md`
 - Per-ticker coverage, missing sessions and quality status in
-  `data/reports/data_coverage.json`, `data/reports/data_quality.json` and
-  `data/reports/data_quality_features.json`
+  `data/reports/data_coverage.json`, `data/reports/data_quality.json`,
+  `data/reports/data_quality_features.json` and
+  `data/reports/model_quality.json`
 
 ## Repository layout
 

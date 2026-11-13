@@ -503,6 +503,49 @@ def run_features(settings: Settings) -> dict:
         raise
 
 
+# --------------------------------------------------------------------- train
+def run_train(settings: Settings) -> dict:
+    """Stage 5: Gold features -> walk-forward trained models (Phase 5)."""
+    from asx_quant.models.build import train_models
+
+    lake = DataLake.from_settings(settings)
+    registry = _make_registry(settings, lake)
+    record = registry.begin_stage("train")
+    try:
+        result = train_models(lake, settings, registry)
+        predictions = read_parquet(result.predictions_path)
+        eval_auc = {
+            name: round(metrics.get("roc_auc", float("nan")), 4)
+            for name, metrics in result.evaluation_metrics.items()
+            if "roc_auc" in metrics
+        }
+        eval_ic = {
+            name: round(metrics.get("spearman", float("nan")), 4)
+            for name, metrics in result.evaluation_metrics.items()
+            if "spearman" in metrics
+        }
+        summary = {
+            "run_id": registry.run_id,
+            "model_version": result.model_version,
+            "n_folds": result.n_folds,
+            "n_models": result.n_models,
+            "n_prediction_rows": len(predictions),
+            "evaluation_auc": eval_auc,
+            "evaluation_spearman": eval_ic,
+            "quality_status": (result.report.to_dict()["status"]
+                               if result.report else "skipped"),
+            "warn_failures": (result.report.warn_count()
+                              if result.report else 0),
+        }
+        registry.finish_stage(record, record_count=len(predictions), **{
+            k: v for k, v in summary.items() if k != "run_id"
+        })
+        return summary
+    except Exception as exc:
+        registry.finish_stage(record, status="failed", error=str(exc))
+        raise
+
+
 def _latest_security_master(lake: DataLake) -> pd.DataFrame:
     batches = lake.bronze_batches("security_master", "asx200")
     if not batches:

@@ -20,8 +20,9 @@ def test_cli_version() -> None:
 
 
 def test_cli_phased_commands_report_not_implemented() -> None:
-    # ingest/validate/transform are implemented (Phase 2); the rest are not.
-    assert cli.main(["train"]) == 2
+    # Implemented: ingest/validate/transform (Phase 2-3), features (Phase 4),
+    # train (Phase 5). The rest are later phases and must NOT pretend to run.
+    assert cli.main(["predict"]) == 2
     assert cli.main(["backtest"]) == 2
     assert cli.main(["portfolio"]) == 2
 
