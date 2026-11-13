@@ -4,15 +4,31 @@
 # The backtester must be transparent about every assumption here.
 
 backtest:
+  signal:
+    # Gold dataset produced by the portfolio stage (Phase 6): long-format
+    # target weights per rebalance date.
+    dataset: target_portfolios
+
+  benchmark:
+    # Comparison series for excess-return metrics. VAS.AX adjusted_close
+    # includes cash distributions (total-return proxy — the fair peer for a
+    # dividend-crediting portfolio); IDX_AXJO is the price-only index and is
+    # the fallback. First available ticker in priority order wins.
+    ticker_priority: [VAS.AX, IDX_AXJO]
+
   execution:
     # Signal close (session t) -> execution at session t+1 prices. The model
     # NEVER trades at the same close used to compute the signal.
     signal_to_execution_lag_sessions: 1
     execution_price: next_session_open   # next_session_open | next_session_close
     execution_calendar: asx              # trading sessions only, never calendar days
-    slippage_bps: 10                     # base scenario; see scenarios below
+    # NOTE: slippage_bps below is SUPERSEDED by the per-scenario
+    # slippage_percent in transaction_costs.scenarios (base = 10 bps — the
+    # same number, kept for reference only). The engine applies the scenario.
+    slippage_bps: 10                     # legacy reference; see transaction_costs
 
   transaction_costs:
+    active_scenario: base                # optimistic | base | conservative
     scenarios:
       optimistic: {brokerage_per_trade_aud: 0.0,  brokerage_percent: 0.0002, slippage_percent: 0.0005}
       base:       {brokerage_per_trade_aud: 9.5,  brokerage_percent: 0.0005, slippage_percent: 0.0010}

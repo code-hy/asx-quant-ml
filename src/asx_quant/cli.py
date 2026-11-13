@@ -9,9 +9,8 @@ Command set:
     python -m asx_quant.cli transform              Bronze → Silver + coverage
     python -m asx_quant.cli features               (Phase 4+)
     python -m asx_quant.cli train                  (Phase 5+)
-    python -m asx_quant.cli predict                (Phase 6+)
-    python -m asx_quant.cli portfolio              (Phase 7+)
-    python -m asx_quant.cli backtest               (Phase 8+)
+    python -m asx_quant.cli portfolio              (Phase 6+)
+    python -m asx_quant.cli backtest               (Phase 7+)
     python -m asx_quant.cli report                 (Phase 9+)
     python -m asx_quant.cli update    --mode ...   (Phase 9+)
 """
@@ -68,8 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("features", help="Compute the Gold feature set + target labels (Phase 4).")
     subparsers.add_parser("train", help="Walk-forward model training + OOS predictions (Phase 5).")
     subparsers.add_parser("portfolio", help="Construct long-only target portfolios (Phase 6).")
+    subparsers.add_parser("backtest", help="Simulate the target portfolios with costs (Phase 7).")
 
-    for name in ("predict", "backtest", "report", "update"):
+    for name in ("predict", "report", "update"):
         sub = subparsers.add_parser(name, help=f"[Phase 7+] Not yet implemented: {name}")
         _add_mode_argument(sub)
 
@@ -227,6 +227,21 @@ def main(argv: list[str] | None = None) -> int:
               f"({summary['n_weight_rows']:,} weight rows)")
         print(f"  avg turnover per rebalance: {summary['avg_turnover']:.4f}")
         print(f"  quality status: {summary['quality_status']} "
+              f"({summary['warn_failures']} warnings)")
+        return 0
+    if args.command == "backtest":
+        from asx_quant.pipeline.stages import run_backtest
+
+        summary = run_backtest(settings)
+        print(f"Backtest complete (run {summary['run_id']}):")
+        print(f"  final NAV: AUD {summary['final_nav']:,.2f} "
+              f"(total return {summary['total_return']:+.2%})")
+        sharpe = summary["sharpe"]
+        sharpe_text = (f"{sharpe:.3f}" if sharpe is not None else "n/a")
+        print(f"  Sharpe: {sharpe_text} | max drawdown: "
+              f"{summary['max_drawdown']:.2%}")
+        print(f"  trades: {summary['n_trades']:,} | quality status: "
+              f"{summary['quality_status']} "
               f"({summary['warn_failures']} warnings)")
         return 0
 

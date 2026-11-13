@@ -8,7 +8,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 > **Not financial advice.** This is an educational project. It does not execute live
 > trades, and its outputs are historical research signals, not trade instructions.
 
-## Status — Phase 6 (Portfolio Construction) ✅
+## Status — Phase 7 (Backtesting) ✅
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -18,7 +18,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 | 4 | Feature engineering + target labels | **complete** |
 | 5 | Model training (purged walk-forward CV) + OOS predictions | **complete** |
 | 6 | Portfolio construction engine | **complete** |
-| 7 | Backtesting framework | planned |
+| 7 | Backtesting framework | **complete** |
 | 8 | Sensitivity analysis + robustness | planned |
 | 9 | Streamlit dashboard + automation | planned |
 | 10 | Final report + presentation | planned |
@@ -104,6 +104,12 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
   metrics only), 20 liquid names, long-only, 10% per-name cap, cash
   residual — see `data/reports/portfolio_summary.json` and
   `data/reports/portfolio_quality.json`
+- Backtest simulation (`gold/backtest_equity_curve.parquet`,
+  `gold/backtest_trades.parquet`): next-session-open execution with a
+  1-session lag, whole shares, cost scenario (base), dividends credited to
+  cash, splits quantity-adjusted — `data/reports/backtest_metrics.json`
+  (+ held-out window block, never used for selection) and
+  `data/reports/backtest_quality.json`
 - Per-ticker coverage, missing sessions and quality status in
   `data/reports/data_coverage.json`, `data/reports/data_quality.json`,
   `data/reports/data_quality_features.json` and

@@ -576,6 +576,37 @@ def run_portfolio(settings: Settings) -> dict:
         raise
 
 
+# ------------------------------------------------------------------ backtest
+def run_backtest(settings: Settings) -> dict:
+    """Stage 7: target portfolios -> simulated NAV, trades, metrics (Phase 7)."""
+    from asx_quant.backtest.build import build_backtest
+
+    lake = DataLake.from_settings(settings)
+    registry = _make_registry(settings, lake)
+    record = registry.begin_stage("backtest")
+    try:
+        result = build_backtest(lake, settings, registry)
+        summary = {
+            "run_id": registry.run_id,
+            "final_nav": round(result.final_nav, 2),
+            "total_return": round(result.total_return, 6),
+            "sharpe": result.sharpe,
+            "max_drawdown": round(result.max_drawdown, 6),
+            "n_trades": result.n_trades,
+            "quality_status": (result.report.to_dict()["status"]
+                               if result.report else "skipped"),
+            "warn_failures": (result.report.warn_count()
+                              if result.report else 0),
+        }
+        registry.finish_stage(record, record_count=result.n_trades, **{
+            k: v for k, v in summary.items() if k != "run_id"
+        })
+        return summary
+    except Exception as exc:
+        registry.finish_stage(record, status="failed", error=str(exc))
+        raise
+
+
 def _latest_security_master(lake: DataLake) -> pd.DataFrame:
     batches = lake.bronze_batches("security_master", "asx200")
     if not batches:
