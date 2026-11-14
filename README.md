@@ -8,7 +8,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 > **Not financial advice.** This is an educational project. It does not execute live
 > trades, and its outputs are historical research signals, not trade instructions.
 
-## Status — Phase 9 (Dashboard & Automation) ✅
+## Status — Phase 10 (Final Report & Presentation) ✅ — ALL PHASES COMPLETE
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -21,7 +21,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 | 7 | Backtesting framework | **complete** |
 | 8 | Sensitivity analysis + robustness | **complete** |
 | 9 | Streamlit dashboard + automation | **complete** |
-| 10 | Final report + presentation | planned |
+| 10 | Final report + presentation | **complete** |
 
 ## Quick start
 
@@ -128,6 +128,11 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
   Portfolio (holdings/turnover per rebalance), Sensitivity (grid heat
   map with the NOT-a-leaderboard banner) and Data Quality (rules + run
   log); read-only over the lake, every page carries the disclaimer
+- Final documentation (Phase 10): `docs/final_report.md` (full
+  technical report with the honest headline: +65.3% vs market +79.0%,
+  cost drag identified as the mechanism), `docs/presentation.md`
+  (slide-by-slide deck) and `docs/explainer.md` (plain-language guide
+  requiring no prior knowledge of markets or ML)
 - Per-ticker coverage, missing sessions and quality status in
   `data/reports/data_coverage.json`, `data/reports/data_quality.json`,
   `data/reports/data_quality_features.json` and
@@ -146,6 +151,20 @@ asx-quant-ml/
 ├── tests/             # pytest suite
 └── scripts/           # convenience entrypoints
 ```
+
+## Documentation map
+
+| Document | Audience / purpose |
+|---|---|
+| `docs/explainer.md` | **Start here** — the whole project explained for readers new to markets and ML |
+| `docs/final_report.md` | Full technical report: data, methods, results, limitations, next steps |
+| `docs/presentation.md` | Slide-by-slide summary deck |
+| `docs/architecture.md` | Software architecture and the medallion lake |
+| `docs/data_model.md` / `docs/data_dictionary.md` | Lake layout and column meanings |
+| `docs/data_sources.md` | Free sources, limitations, alternatives |
+| `docs/feature_catalogue.md` | Every feature and its hypothesis |
+| `docs/training_methodology.md` | The leakage-control ML protocol |
+| `docs/automation.md` | `update` command, scheduler recipe, dashboard ops |
 
 ## Research framing
 

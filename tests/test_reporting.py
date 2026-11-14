@@ -175,6 +175,26 @@ def test_run_update_stage_chains_in_order(lake_root, monkeypatch) -> None:
     assert summary["stages"]["report"]["final_nav"] is None  # no artifacts
 
 
+# ------------------------------------------------------------ phase 10 docs
+def test_phase10_documents_exist_and_are_honest(repo_root) -> None:
+    """The final report, presentation and beginner explainer exist, and the
+    explainer carries the not-financial-advice framing."""
+    docs = repo_root / "docs"
+    for name in ("final_report.md", "presentation.md", "explainer.md"):
+        path = docs / name
+        assert path.is_file(), f"missing Phase 10 deliverable: {name}"
+        assert path.stat().st_size > 2_000, f"suspiciously small: {name}"
+
+    explainer = (docs / "explainer.md").read_text(encoding="utf-8")
+    assert "not financial advice" in explainer.lower()
+    assert "machine learning" in explainer.lower()
+    report = (docs / "final_report.md").read_text(encoding="utf-8")
+    assert "cost drag" in report.lower()
+    assert "NOT a leaderboard" in report
+    # the strategy-vs-benchmark headline must be stated, not buried
+    assert "65.27%" in report and "79.02%" in report
+
+
 def test_run_update_stage_aborts_on_failure(lake_root, monkeypatch) -> None:
     calls: list[str] = []
 
