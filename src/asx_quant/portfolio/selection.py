@@ -85,6 +85,8 @@ def eligible_universe(
     require_liquidity_flag: bool = True,
     min_history_sessions: int = 250,
     history: pd.Series | None = None,
+    day_signals: pd.DataFrame | None = None,
+    day_features: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Eligible candidates at one rebalance date, with their signals.
 
@@ -97,13 +99,18 @@ def eligible_universe(
         history: Optional precomputed per-row session counts
             (:func:`history_sessions_per_row`); computed once per build for
             speed instead of per date.
+        day_signals: Optional pre-sliced signals rows for the date (the
+            orchestrator groups once per build instead of scanning the
+            full frame per rebalance).
+        day_features: Optional pre-sliced feature rows for the date.
 
     Returns:
         Frame (ticker, signal, trained_through, fold_id, history_sessions)
         of eligible tickers, unranked. Empty when the date has no
         predictions.
     """
-    day_signals = signals[signals["date"] == rebalance_date]
+    day_signals = (signals[signals["date"] == rebalance_date]
+                   if day_signals is None else day_signals)
     if day_signals.empty:
         return pd.DataFrame(
             columns=["ticker", "signal", "trained_through", "fold_id",
@@ -115,7 +122,8 @@ def eligible_universe(
         pd.to_datetime(day_signals["trained_through"]) < rebalance_date
     ]
 
-    day_features = features[features["date"] == rebalance_date]
+    day_features = (features[features["date"] == rebalance_date]
+                    if day_features is None else day_features)
     if day_features.empty:
         return pd.DataFrame(
             columns=["ticker", "signal", "trained_through", "fold_id",

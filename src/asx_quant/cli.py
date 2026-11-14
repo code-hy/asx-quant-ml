@@ -11,6 +11,7 @@ Command set:
     python -m asx_quant.cli train                  (Phase 5+)
     python -m asx_quant.cli portfolio              (Phase 6+)
     python -m asx_quant.cli backtest               (Phase 7+)
+    python -m asx_quant.cli sensitivity            (Phase 8+)
     python -m asx_quant.cli report                 (Phase 9+)
     python -m asx_quant.cli update    --mode ...   (Phase 9+)
 """
@@ -68,6 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("train", help="Walk-forward model training + OOS predictions (Phase 5).")
     subparsers.add_parser("portfolio", help="Construct long-only target portfolios (Phase 6).")
     subparsers.add_parser("backtest", help="Simulate the target portfolios with costs (Phase 7).")
+    subparsers.add_parser("sensitivity", help="Run the portfolio/backtest sensitivity grid (Phase 8).")
 
     for name in ("predict", "report", "update"):
         sub = subparsers.add_parser(name, help=f"[Phase 7+] Not yet implemented: {name}")
@@ -243,6 +245,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  trades: {summary['n_trades']:,} | quality status: "
               f"{summary['quality_status']} "
               f"({summary['warn_failures']} warnings)")
+        return 0
+    if args.command == "sensitivity":
+        from asx_quant.pipeline.stages import run_sensitivity_stage
+
+        summary = run_sensitivity_stage(settings)
+        print(f"Sensitivity run complete (run {summary['run_id']}):")
+        print(f"  grid points: {summary['n_grid_points']} "
+              f"(+{summary['n_skipped_axes']} skipped axes, "
+              f"{summary['n_rows']} result rows)")
+        if summary["best_sharpe"] is not None:
+            print(f"  best Sharpe: {summary['best_sharpe']:.3f} | "
+                  f"best total return: {summary['best_total_return']:+.2%}")
+        print("  NOTE: research diagnostics only - never used for "
+              "selection.")
         return 0
 
     return _cmd_not_implemented(args.command)

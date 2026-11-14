@@ -12,7 +12,9 @@ Execution model (config/backtest.yaml, every assumption explicit):
 * WHOLE SHARES — trades are whole shares: the target quantity is
   ``floor(target_value / execution_price)`` with ``target_value =
   target_weight * NAV(previous close)``. ``min_trade_value_aud`` dust trades
-  are skipped and counted.
+  are skipped and counted — EXCEPT full exits of dropped names, which always
+  execute (a stranded dust position would break the holdings cap; forced
+  dust exits are counted in ``forced_dust_exits``).
 * CASH — sells execute before buys (sells free capital); a buy that exceeds
   available cash is skipped and counted. Cash never goes negative: no
   leverage is invented.
@@ -55,9 +57,30 @@ class BacktestResult:
     diagnostics: dict = field(default_factory=dict)
 
 
-def _pivot(prices: pd.DataFrame, column: str) -> pd.DataFrame:
-    """Date x ticker pivot of one price column (union of all sessions)."""
-    return prices.pivot(index="date", columns="ticker", values=column)
+@dataclass
+class PricePivots:
+    """Date x ticker price pivots, prepared once and reused across runs."""
+
+    open_px: pd.DataFrame
+    close_px: pd.DataFrame
+    div_px: pd.DataFrame
+    split_px: pd.DataFrame
+    sessions: list
+
+
+def prepare_price_pivots(prices: pd.DataFrame) -> PricePivots:
+    """Pivot the silver price columns once (drop duplicate ticker/date)."""
+    clean = prices.drop_duplicates(subset=["ticker", "date"], keep="last")
+    open_px = clean.pivot(index="date", columns="ticker",
+                          values="open_price")
+    close_px = clean.pivot(index="date", columns="ticker",
+                           values="close_price")
+    div_px = clean.pivot(index="date", columns="ticker",
+                         values="dividend_amount")
+    split_px = clean.pivot(index="date", columns="ticker",
+                           values="split_factor")
+    return PricePivots(open_px=open_px, close_px=close_px, div_px=div_px,
+                       split_px=split_px, sessions=sorted(open_px.index))
 
 
 def run_backtest(
@@ -66,6 +89,7 @@ def run_backtest(
     execution_cfg: dict | None = None,
     costs: dict | None = None,
     capital_cfg: dict | None = None,
+    pivots: PricePivots | None = None,
 ) -> BacktestResult:
     """Simulate the target portfolios on the silver price history.
 
@@ -78,6 +102,8 @@ def run_backtest(
         costs: ONE cost scenario dict (brokerage_per_trade_aud,
             brokerage_percent, slippage_percent).
         capital_cfg: The ``backtest.capital`` config section.
+        pivots: Optional precomputed :class:`PricePivots` (the sensitivity
+            runner prepares them once and reuses them across the grid).
 
     Returns:
         :class:`BacktestResult` with the daily equity curve, one row per
@@ -131,12 +157,13 @@ def run_backtest(
             targets_by_effective[eff] = dict(weights)
         rebal_by_effective[eff] = group["rebalance_date"].iloc[0]
 
-    prices = prices.drop_duplicates(subset=["ticker", "date"], keep="last")
-    open_px = _pivot(prices, "open_price")
-    close_px = _pivot(prices, "close_price")
-    div_px = _pivot(prices, "dividend_amount")
-    split_px = _pivot(prices, "split_factor")
-    sessions = sorted(open_px.index)
+    if pivots is None:
+        pivots = prepare_price_pivots(prices)
+    open_px = pivots.open_px
+    close_px = pivots.close_px
+    div_px = pivots.div_px
+    split_px = pivots.split_px
+    sessions = list(pivots.sessions)
 
     start = min(targets_by_effective)
     trade_sessions = [s for s in sessions if s >= start]
@@ -156,6 +183,7 @@ def run_backtest(
         "rebalances_planned": len(targets_by_effective),
         "rebalances_executed": 0,
         "skipped_dust_trades": 0,
+        "forced_dust_exits": 0,
         "skipped_insufficient_cash": 0,
         "skipped_no_price": 0,
         "split_events": 0,
@@ -199,9 +227,18 @@ def run_backtest(
             if delta == 0:
                 continue
             trade_value = abs(delta) * raw
-            if trade_value < min_trade_value:
+            # Full exits (a dropped name) must ALWAYS execute: skipping them
+            # on the dust rule strands the position outside the target
+            # portfolio and inflates n_positions past the configured cap
+            # (found on monthly/30-name scenarios, 2022-02). The dust rule
+            # exists to save fixed brokerage on small adjustments, not to
+            # trap exits. Forced dust exits are counted, never silent.
+            is_full_exit = current > 0 and target_qty == 0
+            if trade_value < min_trade_value and not is_full_exit:
                 diag["skipped_dust_trades"] += 1
                 continue
+            if is_full_exit and trade_value < min_trade_value:
+                diag["forced_dust_exits"] += 1
             intended.append((ticker, delta, raw))
 
         # Sells first (free capital), then buys largest-weight first.

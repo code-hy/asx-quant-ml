@@ -115,6 +115,10 @@ def run_backtest_quality_checks(
     for counter, detail in (
         ("skipped_dust_trades",
          "Trades below min_trade_value_aud were skipped (dust rule)."),
+        ("forced_dust_exits",
+         "Full exits below min_trade_value_aud were executed anyway: a "
+         "dropped name must leave the portfolio even when its sale value "
+         "is dust (stranding it would break the holdings cap)."),
         ("skipped_insufficient_cash",
          "Buys exceeding available cash were skipped (no leverage rule)."),
         ("skipped_no_price",

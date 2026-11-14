@@ -8,7 +8,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 > **Not financial advice.** This is an educational project. It does not execute live
 > trades, and its outputs are historical research signals, not trade instructions.
 
-## Status — Phase 7 (Backtesting) ✅
+## Status — Phase 8 (Sensitivity & Robustness) ✅
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -19,7 +19,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 | 5 | Model training (purged walk-forward CV) + OOS predictions | **complete** |
 | 6 | Portfolio construction engine | **complete** |
 | 7 | Backtesting framework | **complete** |
-| 8 | Sensitivity analysis + robustness | planned |
+| 8 | Sensitivity analysis + robustness | **complete** |
 | 9 | Streamlit dashboard + automation | planned |
 | 10 | Final report + presentation | planned |
 
@@ -80,7 +80,7 @@ uv run asx_quant initialise  # create dirs + warehouse + run registry
 uv run asx_quant ingest --mode historical  # universe + 10y prices → Bronze
 uv run asx_quant validate                  # data-quality checks + report
 uv run asx_quant transform                 # Bronze → Silver + coverage report
-# Phase 3+: features, train, predict, portfolio, backtest, report, update
+# Phase 3+: features, train, portfolio, backtest, sensitivity, report, update
 ```
 
 ## Data coverage (Phase 2-4 build)
@@ -110,6 +110,12 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
   cash, splits quantity-adjusted — `data/reports/backtest_metrics.json`
   (+ held-out window block, never used for selection) and
   `data/reports/backtest_quality.json`
+- Sensitivity grid (`data/reports/sensitivity_results.parquet`,
+  `data/reports/sensitivity_report.json`): portfolio sizes x rebalance
+  frequencies x caps x cost scenarios, re-run in memory over the same
+  pure construction core (the base grid point reproduces the primary
+  backtest); the 10d horizon and sector weights are recorded as
+  explicitly skipped axes with reasons
 - Per-ticker coverage, missing sessions and quality status in
   `data/reports/data_coverage.json`, `data/reports/data_quality.json`,
   `data/reports/data_quality_features.json` and

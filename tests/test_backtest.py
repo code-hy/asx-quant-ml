@@ -152,6 +152,59 @@ def test_engine_skips_dust_trades() -> None:
     assert result.equity_curve["nav"].eq(80.0).all()
 
 
+def test_engine_forced_dust_exit_executes() -> None:
+    """Regression (Phase 8 real run): a dropped name whose exit value is
+    below min_trade_value MUST still be sold — skipping it strands the
+    position and inflates n_positions past the configured cap (monthly
+    30-name scenarios peaked at 31 on 2022-02). The forced exit is
+    counted, never silent."""
+    # AAA crashes to 0.05 before the second rebalance -> the 4,950-share
+    # position is worth ~247.50 (dust, < 500) at the exit rebalance.
+    rows = []
+    for ticker in ("AAA.AX", "BBB.AX"):
+        price = 10.0
+        for i, date in enumerate(SESSIONS):
+            if ticker == "AAA.AX" and i >= 10:
+                price = 0.05
+            rows.append({
+                "ticker": ticker, "date": date,
+                "open_price": round(price, 6),
+                "close_price": round(price, 6),
+                "adjusted_close": round(price, 6),
+                "dividend_amount": 0.0, "split_factor": 0.0,
+            })
+    bpx = 3000.0
+    for date in SESSIONS:
+        rows.append({"ticker": "VAS.AX", "date": date,
+                     "open_price": bpx, "close_price": bpx,
+                     "adjusted_close": bpx, "dividend_amount": 0.0,
+                     "split_factor": 0.0})
+        bpx *= 1.0005
+    prices = pd.DataFrame(rows)
+
+    pf = pd.DataFrame({
+        "rebalance_date": [SESSIONS[2], SESSIONS[10], SESSIONS[10]],
+        "effective_date": [SESSIONS[3], SESSIONS[11], SESSIONS[11]],
+        "ticker": ["AAA.AX", "AAA.AX", "BBB.AX"],
+        "target_weight": [0.5, 0.0, 0.9],
+    })
+    result = run_backtest(
+        pf, prices, execution_cfg={"execution_price": "next_session_open"},
+        costs=ZERO_COSTS,
+        capital_cfg={"initial_capital_aud": 100_000.0,
+                     "min_trade_value_aud": 500.0},
+    )
+    sells = result.trades[
+        (result.trades["ticker"] == "AAA.AX")
+        & (result.trades["effective_date"] == SESSIONS[11])]
+    assert len(sells) == 1  # the dust exit executed
+    assert result.diagnostics["forced_dust_exits"] == 1
+    # the position left the book: n_positions back to target on day 11
+    day11 = result.equity_curve[
+        result.equity_curve["date"] == SESSIONS[11]]
+    assert day11["n_positions"].iloc[0] == 1
+
+
 def test_engine_cash_never_negative_and_sells_first() -> None:
     prices = _prices_frame()
     # two rebalances: 90% into AAA, then rotate into BBB (sells free cash

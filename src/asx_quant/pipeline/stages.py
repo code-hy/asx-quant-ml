@@ -607,6 +607,38 @@ def run_backtest(settings: Settings) -> dict:
         raise
 
 
+# --------------------------------------------------------------- sensitivity
+def run_sensitivity_stage(settings: Settings) -> dict:
+    """Stage 8: portfolio + backtest sensitivity grid (Phase 8)."""
+    from asx_quant.sensitivity.runner import run_sensitivity
+
+    lake = DataLake.from_settings(settings)
+    registry = _make_registry(settings, lake)
+    record = registry.begin_stage("sensitivity")
+    try:
+        result = run_sensitivity(lake, settings, registry)
+        ok = result.rows[result.rows["status"] == "ok"]
+        summary = {
+            "run_id": registry.run_id,
+            "n_grid_points": result.n_points,
+            "n_rows": len(result.rows),
+            "n_skipped_axes": result.n_skipped_axes,
+            "best_sharpe": (
+                float(ok["sharpe_ratio"].max())
+                if len(ok) and ok["sharpe_ratio"].notna().any() else None),
+            "best_total_return": (
+                float(ok["total_return"].max())
+                if len(ok) and ok["total_return"].notna().any() else None),
+        }
+        registry.finish_stage(record, record_count=len(result.rows), **{
+            k: v for k, v in summary.items() if k != "run_id"
+        })
+        return summary
+    except Exception as exc:
+        registry.finish_stage(record, status="failed", error=str(exc))
+        raise
+
+
 def _latest_security_master(lake: DataLake) -> pd.DataFrame:
     batches = lake.bronze_batches("security_master", "asx200")
     if not batches:
