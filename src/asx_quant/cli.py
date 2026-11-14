@@ -11,9 +11,10 @@ Command set:
     python -m asx_quant.cli train                  (Phase 5+)
     python -m asx_quant.cli portfolio              (Phase 6+)
     python -m asx_quant.cli backtest               (Phase 7+)
-    python -m asx_quant.cli sensitivity            (Phase 8+)
-    python -m asx_quant.cli report                 (Phase 9+)
-    python -m asx_quant.cli update    --mode ...   (Phase 9+)
+    python -m asx_quant.cli sensitivity            (Phase 8)
+    python -m asx_quant.cli report                 (Phase 9)
+    python -m asx_quant.cli update    [--mode incremental] [--with-sensitivity]
+    python -m asx_quant.cli predict                (later phase)
 """
 
 from __future__ import annotations
@@ -32,10 +33,8 @@ from asx_quant.storage.paths import DataLake
 
 logger = get_logger("cli")
 
-#: Commands delivered in later phases; listed so users can see the contract.
-_PHASED_COMMANDS = (
-    "features", "train", "predict", "portfolio", "backtest", "report", "update",
-)
+#: Commands delivered in a later phase; listed so users can see the contract.
+_PHASED_COMMANDS = ("predict",)
 
 
 def _add_mode_argument(parser: argparse.ArgumentParser) -> None:
@@ -71,9 +70,20 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("backtest", help="Simulate the target portfolios with costs (Phase 7).")
     subparsers.add_parser("sensitivity", help="Run the portfolio/backtest sensitivity grid (Phase 8).")
 
-    for name in ("predict", "report", "update"):
-        sub = subparsers.add_parser(name, help=f"[Phase 7+] Not yet implemented: {name}")
+    for name in ("predict",):
+        sub = subparsers.add_parser(name, help=f"[later phase] Not yet implemented: {name}")
         _add_mode_argument(sub)
+
+    subparsers.add_parser(
+        "report",
+        help="Consolidate the platform state into data/reports/platform_summary.json (Phase 9).")
+    update = subparsers.add_parser(
+        "update",
+        help="Automated end-to-end refresh: ingest -> ... -> backtest (Phase 9).")
+    _add_mode_argument(update)
+    update.add_argument(
+        "--with-sensitivity", action="store_true",
+        help="Also run the slow Phase 8 sensitivity grid.")
 
     return parser
 
@@ -259,6 +269,37 @@ def main(argv: list[str] | None = None) -> int:
                   f"best total return: {summary['best_total_return']:+.2%}")
         print("  NOTE: research diagnostics only - never used for "
               "selection.")
+        return 0
+    if args.command == "report":
+        from asx_quant.pipeline.stages import run_report_stage
+
+        summary = run_report_stage(settings)
+        print(f"Platform report written (run {summary['run_id']}):")
+        print(f"  -> {summary['summary_path']}")
+        run_stages = ", ".join(summary["stages_run"]) or "(none)"
+        not_run = ", ".join(summary["stages_not_run"]) or "(none)"
+        print(f"  stages with artifacts: {run_stages}")
+        print(f"  stages never run:      {not_run}")
+        if summary["final_nav"] is not None:
+            print(f"  headline: NAV {summary['final_nav']:,.2f} "
+                  f"(total return {summary['total_return']:+.2%})")
+        return 0
+    if args.command == "update":
+        from asx_quant.pipeline.stages import run_update_stage
+
+        summary = run_update_stage(
+            settings, mode=args.mode, with_sensitivity=args.with_sensitivity)
+        print(f"Update complete (run {summary['run_id']}) "
+              f"-> {summary['n_stages_run']} stage results:")
+        for name, stage_summary in summary["stages"].items():
+            if "error" in stage_summary:
+                print(f"  FAILED  {name}: {stage_summary['error'][:120]}")
+            else:
+                print(f"  ok      {name}")
+        if summary["failed"] is not None:
+            print(f"  update aborted at '{summary['failed']}' — "
+                  "fix the cause and rerun (stages are restartable).")
+            return 1
         return 0
 
     return _cmd_not_implemented(args.command)

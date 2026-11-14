@@ -8,7 +8,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 > **Not financial advice.** This is an educational project. It does not execute live
 > trades, and its outputs are historical research signals, not trade instructions.
 
-## Status — Phase 8 (Sensitivity & Robustness) ✅
+## Status — Phase 9 (Dashboard & Automation) ✅
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -20,7 +20,7 @@ time-series-aware machine learning → long-only portfolio construction → back
 | 6 | Portfolio construction engine | **complete** |
 | 7 | Backtesting framework | **complete** |
 | 8 | Sensitivity analysis + robustness | **complete** |
-| 9 | Streamlit dashboard + automation | planned |
+| 9 | Streamlit dashboard + automation | **complete** |
 | 10 | Final report + presentation | planned |
 
 ## Quick start
@@ -116,6 +116,18 @@ uv run asx_quant transform                 # Bronze → Silver + coverage report
   pure construction core (the base grid point reproduces the primary
   backtest); the 10d horizon and sector weights are recorded as
   explicitly skipped axes with reasons
+- Consolidated platform snapshot (`data/reports/platform_summary.json`,
+  Phase 9 `report` command): per-stage artifact presence, quality
+  statuses and staleness, headline metrics — read-only over the lake
+- Automated refresh (`update` command): ordered chain ingest → validate
+  → transform → features → train → portfolio → backtest (optionally
+  sensitivity), aborting at the first failure and refreshable;
+  `scripts/update.ps1` + scheduled-task recipe in `docs/automation.md`
+- Streamlit dashboard (`dashboard/`): Home (headline + stage statuses),
+  Backtest (equity curve, drawdown, metrics, diagnostics, trades),
+  Portfolio (holdings/turnover per rebalance), Sensitivity (grid heat
+  map with the NOT-a-leaderboard banner) and Data Quality (rules + run
+  log); read-only over the lake, every page carries the disclaimer
 - Per-ticker coverage, missing sessions and quality status in
   `data/reports/data_coverage.json`, `data/reports/data_quality.json`,
   `data/reports/data_quality_features.json` and

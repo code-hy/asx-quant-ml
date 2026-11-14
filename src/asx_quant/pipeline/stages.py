@@ -639,6 +639,135 @@ def run_sensitivity_stage(settings: Settings) -> dict:
         raise
 
 
+# -------------------------------------------------------------------- report
+def run_report_stage(settings: Settings) -> dict:
+    """Stage 9a: consolidate the platform state into one summary (Phase 9).
+
+    Read-only over the lake: collects artifact presence, quality statuses,
+    staleness and headline numbers from :func:`platform_status` and writes
+    ``data/reports/platform_summary.json``. Never runs a pipeline stage.
+    """
+    from asx_quant.reporting.artifacts import platform_status
+
+    lake = DataLake.from_settings(settings)
+    registry = _make_registry(settings, lake)
+    record = registry.begin_stage("report")
+    try:
+        status = platform_status()
+        path = lake.report_path("platform_summary", ".json")
+        path.write_text(json.dumps(status, indent=2, default=str),
+                        encoding="utf-8")
+
+        stages_run = [
+            name for name, entry in status["stages"].items()
+            if entry["status"] != "not_run"
+        ]
+        summary = {
+            "run_id": registry.run_id,
+            "summary_path": str(path),
+            "stages_run": stages_run,
+            "stages_not_run": [
+                name for name, entry in status["stages"].items()
+                if entry["status"] == "not_run"
+            ],
+            "final_nav": status["headline"].get("final_nav"),
+            "total_return": status["headline"].get("total_return"),
+        }
+        registry.finish_stage(record, record_count=len(stages_run), **{
+            k: v for k, v in summary.items() if k != "run_id"
+        })
+        return summary
+    except Exception as exc:
+        registry.finish_stage(record, status="failed", error=str(exc))
+        raise
+
+
+# -------------------------------------------------------------------- update
+#: The ordered full-refresh chain. Each entry: (stage name, runner).
+_UPDATE_CHAIN = (
+    ("ingest", lambda settings, mode: run_ingest(settings, mode=mode)),
+    ("validate", lambda settings, mode: run_validate(settings)),
+    ("transform", lambda settings, mode: run_transform(settings)),
+    ("features", lambda settings, mode: run_features(settings)),
+    ("train", lambda settings, mode: run_train(settings)),
+    ("portfolio", lambda settings, mode: run_portfolio(settings)),
+    ("backtest", lambda settings, mode: run_backtest(settings)),
+)
+
+
+def run_update_stage(
+    settings: Settings,
+    mode: str = "incremental",
+    with_sensitivity: bool = False,
+) -> dict:
+    """Stage 9b: automated end-to-end refresh (Phase 9).
+
+    Runs the whole chain in order — ingest (``mode``), validate, transform,
+    features, train, portfolio, backtest, and optionally sensitivity —
+    aborting at the first failed stage. Each stage keeps writing its own
+    artifacts and run-registry records, so an aborted update is
+    restartable: rerun ``update`` after fixing the cause.
+
+    Args:
+        settings: Loaded platform settings.
+        mode: Ingest mode ("incremental" appends new sessions; the other
+            stages always rebuild their full dataset deterministically).
+        with_sensitivity: Run the (slow) Phase 8 sensitivity grid too.
+
+    Returns:
+        ``{"stages": {name: stage summary}, "failed": name-or-None}``.
+    """
+    lake = DataLake.from_settings(settings)
+    registry = _make_registry(settings, lake)
+    record = registry.begin_stage("update")
+    stage_summaries: dict[str, dict] = {}
+    failed: str | None = None
+    try:
+        for name, runner in _UPDATE_CHAIN:
+            logger.info("Update stage: %s", name)
+            try:
+                stage_summaries[name] = runner(settings, mode)
+            except Exception as exc:  # noqa: BLE001 (abort, do not mask)
+                failed = name
+                logger.error("Update aborted at '%s': %s", name, exc)
+                stage_summaries[name] = {"error": str(exc)}
+                break
+
+        if failed is None and with_sensitivity:
+            logger.info("Update stage: sensitivity")
+            try:
+                stage_summaries["sensitivity"] = run_sensitivity_stage(
+                    settings)
+            except Exception as exc:  # noqa: BLE001
+                failed = "sensitivity"
+                logger.error("Update aborted at 'sensitivity': %s", exc)
+                stage_summaries["sensitivity"] = {"error": str(exc)}
+
+        # refresh the consolidated snapshot last, even after a failure —
+        # it reflects whatever state the lake is actually in.
+        try:
+            stage_summaries["report"] = run_report_stage(settings)
+        except Exception as exc:  # noqa: BLE001
+            stage_summaries["report"] = {"error": str(exc)}
+
+        summary = {
+            "run_id": registry.run_id,
+            "stages": stage_summaries,
+            "failed": failed,
+            "n_stages_run": len(stage_summaries),
+        }
+        registry.finish_stage(
+            record,
+            status="success" if failed is None else "failed",
+            record_count=len(stage_summaries),
+            failed_stage=failed,
+        )
+        return summary
+    except Exception as exc:
+        registry.finish_stage(record, status="failed", error=str(exc))
+        raise
+
+
 def _latest_security_master(lake: DataLake) -> pd.DataFrame:
     batches = lake.bronze_batches("security_master", "asx200")
     if not batches:
