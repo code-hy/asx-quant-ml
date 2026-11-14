@@ -157,6 +157,7 @@ asx-quant-ml/
 | Document | Audience / purpose |
 |---|---|
 | `docs/explainer.md` | **Start here** — the whole project explained for readers new to markets and ML |
+| `docs/phase_explainer.md` | **The build journey** — each phase's objective, mechanics and hand-offs, from zero knowledge |
 | `docs/final_report.md` | Full technical report: data, methods, results, limitations, next steps |
 | `docs/presentation.md` | Slide-by-slide summary deck |
 | `docs/architecture.md` | Software architecture and the medallion lake |

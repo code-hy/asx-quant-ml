@@ -333,6 +333,8 @@ uv run pytest                                # run all 209 automated tests
 
 Further reading (each builds on the last):
 
+* `docs/phase_explainer.md` — how the project was **built**, phase by
+  phase, with each phase's objective and hand-offs
 * `docs/architecture.md` — how the software is organised
 * `docs/training_methodology.md` — the ML protocol in detail
 * `docs/final_report.md` — the full technical report

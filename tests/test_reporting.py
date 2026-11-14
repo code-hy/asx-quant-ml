@@ -180,7 +180,8 @@ def test_phase10_documents_exist_and_are_honest(repo_root) -> None:
     """The final report, presentation and beginner explainer exist, and the
     explainer carries the not-financial-advice framing."""
     docs = repo_root / "docs"
-    for name in ("final_report.md", "presentation.md", "explainer.md"):
+    for name in ("final_report.md", "presentation.md", "explainer.md",
+                 "phase_explainer.md"):
         path = docs / name
         assert path.is_file(), f"missing Phase 10 deliverable: {name}"
         assert path.stat().st_size > 2_000, f"suspiciously small: {name}"
@@ -193,6 +194,17 @@ def test_phase10_documents_exist_and_are_honest(repo_root) -> None:
     assert "NOT a leaderboard" in report
     # the strategy-vs-benchmark headline must be stated, not buried
     assert "65.27%" in report and "79.02%" in report
+
+    phase_explainer = (docs / "phase_explainer.md").read_text(
+        encoding="utf-8")
+    # every phase 1..10 must have its own section
+    for phase_no in range(1, 11):
+        assert f"# Phase {phase_no}" in phase_explainer, (
+            f"phase_explainer.md missing the Phase {phase_no} section")
+    # the explainer must teach the fundamentals, not assume them
+    for term in ("feature", "backtest", "Sharpe", "drawdown",
+                 "walk-forward"):
+        assert term in phase_explainer
 
 
 def test_run_update_stage_aborts_on_failure(lake_root, monkeypatch) -> None:
