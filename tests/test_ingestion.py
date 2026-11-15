@@ -19,6 +19,7 @@ from asx_quant.ingestion.yahoo import (
     YahooDownloader,
     append_ingestion_log,
     history_start,
+    incremental_start,
     normalise_raw_frame,
 )
 from asx_quant.storage.paths import DataLake
@@ -210,3 +211,32 @@ def test_bronze_master_batch_is_append_only(repo_root: Path,
     p1 = write_bronze_security_master(lake, registry, settings, df)
     p2 = write_bronze_security_master(lake, registry2, settings, df)
     assert p1 != p2 and p1.exists() and p2.exists()  # both batches retained
+
+
+def test_incremental_start_rewinds_from_newest_bronze(
+        tmp_path: Path, repo_root: Path) -> None:
+    """Incremental mode re-downloads a recent reconciliation window: the
+    newest bronze session minus the configured lookback (5 sessions x 3
+    calendar days); an empty lake yields None (caller falls back to full
+    history)."""
+    from asx_quant.config.loader import load_settings
+
+    lake = DataLake(root=tmp_path / "data")
+    lake.ensure_all()
+    settings = load_settings(repo_root)
+    assert incremental_start(lake, settings) is None
+
+    batch_dir = lake.bronze_domain_dir("prices") / "CBA.AX"
+    batch_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {"date": pd.to_datetime(["2026-01-26", "2026-01-28", "2026-01-30"])}
+    ).to_parquet(batch_dir / "20260101T000000Z.parquet", index=False)
+    assert incremental_start(lake, settings) == date(2026, 1, 15)
+
+
+def test_run_ingest_rejects_unknown_mode(repo_root: Path) -> None:
+    from asx_quant.config.loader import load_settings
+    from asx_quant.pipeline.stages import run_ingest
+
+    with pytest.raises(IngestionError):
+        run_ingest(load_settings(repo_root), mode="nonsense")

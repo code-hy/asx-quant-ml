@@ -124,3 +124,56 @@ def test_quality_report_persistence(tmp_path: Path) -> None:
 def test_report_against_real_settings(repo_root: Path) -> None:
     settings = load_settings(repo_root)
     assert float(settings.raw["quality"]["extreme_return_threshold"]) == 0.5
+
+
+def test_run_validate_reconciles_overlapping_macro_batches(
+        tmp_path: Path, repo_root: Path) -> None:
+    """Bronze is append-only: a repeat ingest supersedes older batches.
+    Validation must check the reconciled view (newest batch wins), not the
+    raw concatenation - otherwise every re-ingest would trip the duplicate
+    rules even though the data reaching Silver is clean."""
+    from asx_quant.pipeline.stages import run_validate
+    from asx_quant.storage.paths import DataLake
+
+    lake = DataLake(root=tmp_path / "data")
+    lake.ensure_all()
+    settings = load_settings(repo_root)
+
+    # minimal valid bronze prices for one ticker
+    sessions = pd.to_datetime(["2026-01-26", "2026-01-27", "2026-01-28"])
+    bronze = pd.DataFrame({
+        "source_ticker": "CBA.AX", "source": "yfinance",
+        "date": sessions,
+        "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5,
+        "adj_close": 98.5, "volume": 1000,
+        "dividends": 0.0, "split_factor": 1.0,
+    })
+    bronze.to_parquet(
+        lake.bronze_batch_path("prices", "CBA.AX", "20260101T000000Z"),
+        index=False,
+    )
+
+    # two overlapping RBA batches: the newer one supersedes one observation
+    # and adds a newer one - exactly what an incremental re-ingest produces
+    rba_dir = lake.bronze_domain_dir("rba") / "cash_rate"
+    rba_dir.mkdir(parents=True)
+
+    def macro_frame(observations: list[str], values: list[float]) -> pd.DataFrame:
+        obs = pd.to_datetime(observations)
+        return pd.DataFrame({
+            "series_name": "rba_cash_rate",
+            "observation_date": obs,
+            "publication_date": obs + pd.Timedelta(days=1),
+            "value": values,
+            "potentially_revised": False,
+        })
+
+    macro_frame(["2026-01-01", "2026-02-01"], [4.35, 4.35]).to_parquet(
+        rba_dir / "20260101T000000Z.parquet", index=False)
+    macro_frame(["2026-02-01", "2026-03-01"], [4.35, 4.10]).to_parquet(
+        rba_dir / "20260202T000000Z.parquet", index=False)
+
+    report = run_validate(settings)
+    assert report.passed, [r.name for r in report.errors if not r.passed]
+    dup_rule = _get(report, "no_duplicate_series_observation")
+    assert dup_rule.passed and dup_rule.failures == 0

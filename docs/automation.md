@@ -56,6 +56,16 @@ runs *before* the market open so the artifacts reflect the prior close.
 Logs land in `data/reports/runs/run_log.jsonl`; a non-zero exit code
 means a stage failed (check the log tail for the aborted stage).
 
+## Notebooks
+
+Two executed notebooks complement the CLI (regenerate with
+`uv run --extra dev python scripts/build_notebooks.py`):
+
+| Notebook | Purpose |
+|---|---|
+| `notebooks/01_eda.ipynb` | EDA: target description, feature-vs-target correlations, per-ticker ICs, selection precision, error analysis |
+| `notebooks/02_end_to_end_workflow.ipynb` | Calls the stage functions directly and runs the incremental chain end-to-end; shows the latest trades; documents the full-refresh regime |
+
 ## Dashboard
 
 ```

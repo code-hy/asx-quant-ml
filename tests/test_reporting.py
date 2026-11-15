@@ -207,6 +207,41 @@ def test_phase10_documents_exist_and_are_honest(repo_root) -> None:
         assert term in phase_explainer
 
 
+def test_phase10_notebooks_exist_and_are_executed(repo_root) -> None:
+    """Both deliverable notebooks exist with real executed outputs: the EDA
+    notebook answers the EDA criteria (target description, feature-vs-target
+    correlations, per-ticker prediction/precision analysis) and the workflow
+    notebook demonstrates the whole pipeline via the package's own stage
+    functions."""
+    notebooks = repo_root / "notebooks"
+    for name in ("01_eda.ipynb", "02_end_to_end_workflow.ipynb"):
+        path = notebooks / name
+        assert path.is_file(), f"missing notebook deliverable: {name}"
+
+    eda = (notebooks / "01_eda.ipynb").read_text(encoding="utf-8")
+    # EDA criteria: describe TO_PREDICT, correlate features with it, and
+    # analyse predictions/precision by ticker.
+    for marker in ("TO_PREDICT", "future_return_3d", "spearman", "corrwith",
+                   "per-ticker", "precision"):
+        assert marker in eda, f"01_eda.ipynb missing EDA content: {marker}"
+
+    workflow = (notebooks / "02_end_to_end_workflow.ipynb").read_text(
+        encoding="utf-8")
+    # the workflow notebook must call every pipeline stage function and show
+    # the latest trades
+    for stage in ("run_ingest", "run_validate", "run_transform", "run_train",
+                  "run_portfolio", "run_backtest", "run_report_stage",
+                  "load_target_portfolios", "load_trades"):
+        assert stage in workflow, f"02_end_to_end_workflow.ipynb missing: {stage}"
+
+    # both notebooks must have been executed: every code cell carries an
+    # execution count (nbclient stamps 1..n on executed cells)
+    for name in ("01_eda.ipynb", "02_end_to_end_workflow.ipynb"):
+        raw = (notebooks / name).read_text(encoding="utf-8")
+        assert '"execution_count": null' not in raw, (
+            f"{name} contains an unexecuted code cell")
+
+
 def test_run_update_stage_aborts_on_failure(lake_root, monkeypatch) -> None:
     calls: list[str] = []
 

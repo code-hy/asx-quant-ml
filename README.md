@@ -145,12 +145,22 @@ asx-quant-ml/
 ├── config/            # YAML configuration (all behaviour is config-driven)
 ├── data/              # bronze / silver / gold lake (gitignored)
 ├── docs/              # architecture, data model, dictionary, methodologies
-├── notebooks/         # EDA + experiment notebooks (Phase 5+)
+├── notebooks/         # 01_eda.ipynb (EDA) + 02_end_to_end_workflow.ipynb (run the pipeline)
 ├── src/asx_quant/     # installable package (src layout)
 ├── dashboard/         # Streamlit multi-page research dashboard (Phase 9+)
 ├── tests/             # pytest suite
-└── scripts/           # convenience entrypoints
+└── scripts/           # convenience entrypoints (update.ps1, build_notebooks.py)
 ```
+
+## Notebooks
+
+| Notebook | Purpose |
+|---|---|
+| `notebooks/01_eda.ipynb` | **EDA** — describes the prediction target (`future_return_3d`), correlates all 69 features against it, checks per-year stability, per-ticker prediction ICs, precision of selected names, and worst-miss error analysis |
+| `notebooks/02_end_to_end_workflow.ipynb` | **Workflow** — executes the whole pipeline by calling the package's own stage functions (incremental ingest → validate → transform → features → portfolio → backtest → report), shows the latest trades and headline results, and documents the full-refresh regime |
+
+Both are committed with executed outputs (regenerated via
+`uv run --extra dev python scripts/build_notebooks.py`).
 
 ## Documentation map
 

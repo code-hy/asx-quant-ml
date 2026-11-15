@@ -230,5 +230,41 @@ def history_start(settings) -> date:  # noqa: ANN001
     return date.today() - timedelta(days=365 * years)
 
 
+def incremental_start(lake, settings) -> date | None:  # noqa: ANN001
+    """Earliest date to re-download in incremental mode.
+
+    Finds the newest bronze session across each ticker's newest price
+    batch and rewinds by ``runs.reconciliation_lookback_sessions``
+    sessions (approximated as 3 calendar days per session, which safely
+    covers weekends and public holidays). Silver reconciliation keeps the
+    NEWEST batch's rows for any overlapping (ticker, date), so re-fetching
+    recent history is by design: free providers silently revise recent
+    OHLCV data, and the fresh batch simply supersedes the old rows.
+
+    Returns ``None`` when no bronze prices exist yet; the caller falls
+    back to the full history window.
+    """
+    from asx_quant.storage.parquet import read_parquet
+
+    domain = lake.bronze_domain_dir("prices")
+    if not domain.is_dir():
+        return None
+    latest: pd.Timestamp | None = None
+    for ticker_dir in sorted(p for p in domain.iterdir() if p.is_dir()):
+        batches = sorted(ticker_dir.glob("*.parquet"))
+        if not batches:
+            continue
+        frame = read_parquet(batches[-1], columns=["date"])
+        if frame.empty:
+            continue
+        ticker_latest = pd.to_datetime(frame["date"]).max()
+        if latest is None or ticker_latest > latest:
+            latest = ticker_latest
+    if latest is None:
+        return None
+    lookback = int(settings.raw["runs"]["reconciliation_lookback_sessions"])
+    return (latest - pd.Timedelta(days=3 * lookback)).date()
+
+
 def _is_empty(frame: pd.DataFrame) -> bool:
     return frame is None or frame.empty

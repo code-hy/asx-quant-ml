@@ -2,7 +2,6 @@
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 f = pd.read_parquet(Path("data/gold/features.parquet"))

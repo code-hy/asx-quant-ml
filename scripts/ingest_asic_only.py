@@ -18,9 +18,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from asx_quant.config.loader import load_settings  # noqa: E402
-from asx_quant.pipeline.stages import ingest_asic_bronze  # noqa: E402
 from asx_quant.observability.logging import configure_logging, get_logger  # noqa: E402
 from asx_quant.observability.runs import RunRegistry  # noqa: E402
+from asx_quant.pipeline.stages import ingest_asic_bronze  # noqa: E402
 from asx_quant.storage.paths import DataLake  # noqa: E402
 
 logger = get_logger("scripts.ingest_asic_only")

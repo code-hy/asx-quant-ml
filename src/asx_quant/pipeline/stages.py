@@ -22,6 +22,7 @@ from asx_quant.ingestion.yahoo import (
     YahooDownloader,
     append_ingestion_log,
     history_start,
+    incremental_start,
     normalise_raw_frame,
 )
 from asx_quant.observability.logging import get_logger
@@ -66,13 +67,27 @@ def _benchmark_tickers() -> list[str]:
 
 # ------------------------------------------------------------------- ingest
 def run_ingest(settings: Settings, mode: str = "historical") -> dict:
-    """Stage 1: ingest universe + historical prices into Bronze."""
-    if mode != "historical":
-        raise IngestionError(
-            f"Mode '{mode}' is implemented from Phase 9; use --mode historical."
-        )
+    """Stage 1: ingest universe + historical prices into Bronze.
+
+    ``mode="historical"`` downloads the full configured history window for
+    every ticker. ``mode="incremental"`` re-downloads only recent sessions
+    (newest bronze session minus the reconciliation lookback) into a NEW
+    bronze batch; the Silver newest-batch reconcile then supersedes any
+    provider-revised rows. With an empty lake, incremental falls back to
+    the full history window.
+    """
+    if mode not in ("historical", "incremental"):
+        raise IngestionError(f"Unknown ingestion mode: '{mode}'.")
     lake = DataLake.from_settings(settings)
     lake.ensure_all()
+    if mode == "incremental":
+        start = incremental_start(lake, settings)
+        if start is None:
+            logger.info("Incremental ingest on an empty lake - "
+                        "falling back to the full history window.")
+            start = history_start(settings)
+    else:
+        start = history_start(settings)
     registry = _make_registry(settings, lake)
     record: StageRecord | None = None
     log_records: list[dict[str, object]] = []
@@ -106,7 +121,9 @@ def run_ingest(settings: Settings, mode: str = "historical") -> dict:
             retry_backoff_seconds=float(
                 settings.raw["ingestion"]["market_data"]["retry_backoff_seconds"]),
         )
-        frames, failed = downloader.download(all_tickers, history_start(settings))
+        frames, failed = downloader.download(all_tickers, start)
+        logger.info("Ingest mode=%s start=%s tickers=%d",
+                    mode, start.isoformat(), len(all_tickers))
 
         writer = ParquetWriter(settings)
         batch = registry.run_id  # unique per run; timestamps keep it sortable
@@ -191,6 +208,10 @@ def run_ingest(settings: Settings, mode: str = "historical") -> dict:
             "tickers_written": len(written),
             "records_written": sum(written.values()),
             "failed_tickers": failed,
+            "mode": mode,
+            # platform_status reads this field to mark the ingest stage;
+            # partial means some tickers returned no data in this window
+            "status": "pass" if not failed else "warn",
             "macro": macro_summary,
             "asic": asic_summary,
         }
@@ -312,6 +333,14 @@ def run_validate(settings: Settings) -> QualityReport:
             macro["observation_date"] = pd.to_datetime(macro["observation_date"])
             macro["publication_date"] = pd.to_datetime(macro["publication_date"])
             macro["value"] = pd.to_numeric(macro["value"], errors="coerce")
+            # Bronze is append-only: repeated ingests supersede older
+            # batches. Reconcile exactly as the Silver build does (newest
+            # batch wins per (series, observation)) so validation checks
+            # the view downstream actually consumes, not superseded rows.
+            macro = macro.sort_values(["series_name", "observation_date",
+                                       "batch_id"])
+            macro = macro.drop_duplicates(
+                subset=["series_name", "observation_date"], keep="last")
             macro_report = run_macro_quality_checks(
                 macro, dataset_name="macro_observations")
             combined.results.extend(macro_report.results)
@@ -328,6 +357,12 @@ def run_validate(settings: Settings) -> QualityReport:
             for col in ("trade_date", "publication_date"):
                 positions[col] = pd.to_datetime(positions[col])
             positions["ticker"] = positions["code"].astype(str) + ".AX"
+            # Same newest-batch-wins reconcile as the Silver short-position
+            # build (per (ticker, trade_date)).
+            positions = positions.sort_values(["ticker", "trade_date",
+                                               "batch_id"])
+            positions = positions.drop_duplicates(
+                subset=["ticker", "trade_date"], keep="last")
             positions_report = run_short_position_quality_checks(
                 positions, dataset_name="short_positions")
             combined.results.extend(positions_report.results)
